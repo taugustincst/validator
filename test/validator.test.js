@@ -719,3 +719,41 @@ test('summary: the API serves the PDF and the summary data', async () => {
     assert.equal(j.summary.verdict.headline, '4 roles need attention'); assert.equal(j.summary.roles.length, 4);
   } finally { await s.close(); }
 });
+
+// ───────── round trip at scale: a matrix → one simulated eCW export per role → compare ─────────
+
+test('compare: a baseline cell holding text instead of a tick is a data problem to review, not a grant to make', () => {
+  const rec = (subject, permission, raw) => ({ subject, permission, value: normalizeValue(raw), raw, row: 0 });
+  const r = compare([rec('HIM', 'Documents > Configure Letter Category', 'Documents'), rec('HIM', 'Documents > Bulk Actions', 'X')], [{ ...rec('HIM', 'Documents > Bulk Actions', 'X'), raw: 'listed', listedOnly: true }]);
+  const f = r.findings.find(x => /Configure Letter/.test(x.permission));
+  assert.equal(f.type, 'different'); assert.match(f.note, /says "Documents" instead of a tick — fix the cell/);
+  assert.deepEqual(r.actions[0].grant, []); assert.match(r.actions[0].review[0], /instead of a tick/);
+});
+
+test('round trip: exports derived from the matrix itself compare clean, and planted changes are found exactly', () => {
+  // A wider matrix than the samples: 12 roles × 80 settings, with categories, X ticks, a note on a tick, a duplicate row.
+  const roles = Array.from({ length: 12 }, (_, i) => `Role ${i + 1}`);
+  const groups = ['Billing', 'Progress Notes', 'Scheduling', 'Documents', 'Administration / Billing Setup'];
+  let seed = 7; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  const settings = Array.from({ length: 80 }, (_, i) => [groups[i % groups.length], `Setting ${i + 1}${i % 9 === 0 ? ' > with arrow' : ''}`, `What setting ${i + 1} does`, roles.map(() => rnd() < 0.45)]);
+  const rows = [['Security Item', 'Description / Action', 'Security Group Name', ...roles], ...settings.map(([g, n, d, v]) => [n, d, g, ...v.map((x, ri) => (x ? (ri === 2 && n === 'Setting 5' ? 'x - added 1/1/2026' : 'X') : ''))])];
+  rows.push([...rows[3]]);   // a duplicated row (identical)
+  const mf = path.join(tmp, 'wide-matrix.xlsx'); fs.writeFileSync(mf, buildXlsx([{ name: 'UPGRADE V12', rows }]));
+  const exportFor = (role, held) => buildXlsx([{ name: 'Sheet1', rows: [['Security Setting Name', 'Security Setting Description', 'Security Setting Type', 'Security group Name'], ...held.map(([g, n, d]) => [n, d, 'Old', g])] }]);
+  const heldBy = ri => settings.filter(s => s[3][ri]);
+  // 1. exactly the matrix → nothing to change
+  const clean = roles.map((r, ri) => ({ src: { name: `${r} (${r} desc).xlsx`, data: exportFor(r, heldBy(ri)) }, role: `${r} (${r} desc)` }));
+  const v0 = validate(mf, clean);
+  assert.equal(v0.result.pass, true, JSON.stringify(v0.result.findings.filter(f => f.severity !== 'info').slice(0, 5)));
+  assert.equal(v0.result.users.both, 12); assert.equal(v0.result.compared, 12 * 80); assert.equal(v0.result.counts.ok, 12 * 80);
+  assert.equal(v0.result.matches.filter(m => m.kind === 'user').length, 12, 'every eCW role name (with its parenthetical) paired with its matrix column');
+  // 2. planted changes: Role 3 loses a setting it should have, Role 7 gains one it should not, Role 12's export is missing
+  const planted = roles.map((r, ri) => { let held = heldBy(ri); if (ri === 2) held = held.slice(1); if (ri === 6) held = [...held, settings.find(s => !s[3][6])]; return { src: { name: `${r}.xlsx`, data: exportFor(r, held) }, role: r }; }).slice(0, 11);
+  const v1 = validate(mf, planted);
+  const f = v1.result.findings.filter(x => x.severity !== 'info').map(x => `${x.user}|${x.type}|${x.permission}`).sort();
+  const lost = heldBy(2)[0], gained = settings.find(s => !s[3][6]);
+  assert.deepEqual(f, [`Role 12|user-not-in-ecw|`, `Role 3|missing|${lost[0]} > ${lost[1]}`, `Role 7|excess|${gained[0]} > ${gained[1]}`].sort());
+  assert.deepEqual(v1.result.actions.map(a => a.user).sort(), ['Role 12', 'Role 3', 'Role 7']);
+  assert.equal(v1.result.pass, false);
+  const S = summaryDoc(v1.result, v1.meta); assert.equal(S.verdict.headline, '3 roles need attention'); assert.equal(S.matched.length, 9);
+});

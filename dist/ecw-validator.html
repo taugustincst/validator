@@ -1254,9 +1254,11 @@ function compare(baseline, actual, opts = {}) {
       const ar = a.perms.get(pk);
       const base = { user: name, permission: br.permission, expected: show(br), actual: ar ? show(ar) : '', baselineRow: br.row, actualRow: ar?.row };
       let f;
+      const textCell = br.value !== 'Y' && br.value !== 'N';   // the baseline cell holds text, not a tick: a data problem in the baseline, not a grant to make
       if (!ar && a.listedOnly) {   // not in the role's list = the role does not have it
         const nl = { ...base, actual: 'N (not listed)' };
-        f = isGranted(br.value) ? push({ ...nl, type: 'missing', severity: 'medium', note: 'required by the baseline but not in this role\'s eCW list — grant it in eCW' }) : push({ ...nl, type: 'ok', severity: 'info', note: '' });
+        f = textCell ? push({ ...nl, type: 'different', severity: 'medium', note: `the baseline cell says "${br.raw}" instead of a tick — fix the cell; eCW does not grant it` })
+          : isGranted(br.value) ? push({ ...nl, type: 'missing', severity: 'medium', note: 'required by the baseline but not in this role\'s eCW list — grant it in eCW' }) : push({ ...nl, type: 'ok', severity: 'info', note: '' });
       } else if (!ar) {
         if (A.perms.has(pk)) f = push({ ...base, type: 'missing', severity: isGranted(br.value) ? 'medium' : 'info', note: 'setting exists in eCW but is not listed for this role' });
         else { const near = closest(pk, A.perms); f = push({ ...base, type: 'permission-not-in-ecw', severity: 'low', note: `this setting does not appear anywhere in the eCW export — renamed, or a baseline typo${near ? `; closest eCW setting: "${near.name}"` : ''}`, suggestion: near?.name || '' }); }
@@ -1264,6 +1266,7 @@ function compare(baseline, actual, opts = {}) {
       else {
         const bg = isGranted(br.value), ag = isGranted(ar.value);
         if (ag && !bg) f = push({ ...base, type: 'excess', severity: 'high', note: 'granted in eCW but not in the baseline — remove in eCW, or approve it in the baseline' });
+        else if (bg && !ag && textCell) f = push({ ...base, type: 'different', severity: 'medium', note: `the baseline cell says "${br.raw}" instead of a tick — fix the cell; eCW does not grant it` });
         else if (bg && !ag) f = push({ ...base, type: 'missing', severity: 'medium', note: 'required by the baseline but not granted in eCW — grant it in eCW' });
         else f = push({ ...base, type: 'different', severity: 'medium', note: `both set, but to different levels — eCW says "${ar.raw}", the baseline "${br.raw}"` });
       }
@@ -1326,7 +1329,7 @@ function actions(result) {
   for (const f of result.findings) {
     if (f.type === 'excess') at(f.user).remove.push(f.permission);
     else if (f.type === 'missing' && f.severity !== 'info') at(f.user).grant.push(f.permission);
-    else if (f.type === 'different') at(f.user).review.push(`${f.permission}: eCW has ${f.actual}, baseline wants ${f.expected}`);
+    else if (f.type === 'different') at(f.user).review.push(/instead of a tick/.test(f.note) ? `${f.permission}: ${f.note}` : `${f.permission}: eCW has ${f.actual}, baseline wants ${f.expected}`);
     else if (f.type === 'user-not-in-baseline') at(f.user).status = f.severity === 'high' ? `not in the baseline but holds grants in eCW — add a column for it to the baseline, or retire the role${f.suggestion ? ` (closest baseline role: ${f.suggestion})` : ''}` : 'not in the baseline (no grants) — add it to the baseline or ignore';
     else if (f.type === 'user-not-in-ecw') at(f.user).status = `expected by the baseline but not in eCW — export it from eCW, or retire the baseline column${f.suggestion ? ` (closest eCW role: ${f.suggestion})` : ''}`;
     else if (f.type === 'permission-not-in-baseline' && f.severity === 'low') at(f.user).review.push(`${f.permission}: granted in eCW, not covered by the baseline`);
@@ -1563,7 +1566,7 @@ function summaryDoc(result, meta = {}) {
   const reviewN = result.actions.reduce((n, a) => n + a.review.length, 0);
   const missingRoles = result.actions.filter(a => a.status);
   const clean = result.detail.filter(d => d.inBaseline && d.inEcw && !result.actions.some(a => a.user === d.user)).length;
-  const needs = toFix.length + missingRoles.filter(a => !toFix.includes(a)).length;
+  const needs = result.actions.length;   // every role with anything to do: remove, grant, review, or a status
   const headline = result.pass ? 'eCW matches the matrix' : `${plural(needs, 'role')} need${needs === 1 ? 's' : ''} attention`;
   const detail = result.pass
     ? `${plural(result.users.both, 'role')} compared, ${result.compared} settings checked, nothing to change.${reviewN ? ` ${plural(reviewN, 'item')} to review.` : ''}`
@@ -2041,7 +2044,10 @@ window.ECW = M;
   const fileOpts = p => ({ ignoreSubjects: p === 'b' ? $('bIgnore').value : '', sheet: $(p + 'Sheet').value, layout: $(p + 'Layout').value, orientation: $(p + 'Orient').value, rolesSheet: p === 'b' ? $('bRoles').value : '', blankIsNo: p === 'a' ? $('aBlank').value === 'no' : true, subjectCol: $(p + 'UserCol').value, permissionCol: $(p + 'PermCol').value, valueCol: $(p + 'ValCol').value, categoryCol: $(p + 'CatCol').value });
   const body = () => ({ baseline: files.baseline, actual: files.actual, actuals: actuals.map(a => ({ name: a.name, data: a.data, role: a.role })), aliases: files.aliases, catalog: files.catalog, options: { baseline: fileOpts('b'), actual: fileOpts('a'), ignoreUsers: $('ignoreUsers').value, ignorePermissions: $('ignorePerms').value, onlyUsers: $('onlyUsers').value, matchByName: $('matchByName').checked, reportUnknownPermissions: $('unknownPerms').checked } });
   const canRun = () => { $('run').disabled = !(files.baseline && (files.actual || actuals.length)); $('doc').disabled = !(files.actual || actuals.length); };
-  const guessRole = fname => { const stem = fname.replace(/\.[^.]+$/, '').replace(/[_\-]+/g, ' ').trim().toLowerCase(); return baselineRoles.find(r => stem === r.toLowerCase()) || baselineRoles.find(r => stem.includes(r.toLowerCase()) || r.toLowerCase().includes(stem)) || ''; };
+  // The role a file belongs to, from its name: "Billing.xlsx", "Diabetes RN-RD (Diabetes RN-RD).xlsx" → the matrix
+  // column it matches once punctuation and a parenthetical are ignored (longest match wins).
+  const norm = s => String(s).toLowerCase().replace(/\(.*$/, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const guessRole = fname => { const stem = norm(fname.replace(/\.[^.]+$/, '')); if (!stem) return ''; const exact = baselineRoles.find(r => norm(r) === stem); if (exact) return exact; return baselineRoles.filter(r => norm(r) && (stem.includes(norm(r)) || norm(r).includes(stem))).sort((a, b) => norm(b).length - norm(a).length)[0] || ''; };
 
   // ── file slots ──
   const DROP_TEXT = { b: 'Drop the matrix here', a: 'Drop the exports here', c: 'Drop the catalog here' };
@@ -2197,12 +2203,7 @@ window.ECW = M;
   function render() {
     const j = last, c = j.bySeverity, w = subjectWord();
     const notes = [...(j.baseline.warnings || []).map(x => 'Matrix: ' + x), ...(j.actual.warnings || []).map(x => 'eCW: ' + x)];
-    const toFix = j.actions.filter(a => a.remove.length || a.grant.length), toReview = j.actions.filter(a => !a.remove.length && !a.grant.length);
-    const removeN = j.actions.reduce((n, a) => n + a.remove.length, 0), grantN = j.actions.reduce((n, a) => n + a.grant.length, 0), reviewN = j.actions.reduce((n, a) => n + a.review.length + (a.status ? 1 : 0), 0);
-    const clean = j.detail.filter(d => d.inBaseline && d.inEcw && !j.actions.some(a => a.user === d.user)).length;
-    let big, sub;
-    if (j.pass) { big = `eCW matches the matrix`; sub = `${plural(j.users.both, w)} compared, ${j.compared} settings checked, nothing to change.${reviewN ? ` ${plural(reviewN, 'item')} to review.` : ''}`; }
-    else { big = `${plural(toFix.length + toReview.filter(a => a.status).length, w)} need${toFix.length + toReview.filter(a => a.status).length === 1 ? 's' : ''} attention`; sub = [removeN ? `remove ${plural(removeN, 'permission')}` : '', grantN ? `grant ${plural(grantN, 'permission')}` : '', reviewN ? `review ${plural(reviewN, 'item')}` : ''].filter(Boolean).join(', ') + `. ${clean > 0 ? `${plural(clean, w)} ${clean === 1 ? 'matches' : 'match'} the matrix exactly.` : ''}`; }
+    const big = j.summary.verdict.headline, sub = j.summary.verdict.detail;
     $('out').innerHTML = `<div class="verdict ${j.pass ? 'pass' : 'fail'}"><p class="big">${big}</p><p class="sub">${sub}</p>
       <p class="fine">${j.users.baseline} ${w}s in the matrix · ${j.users.ecw} in eCW · ${j.users.both} in both · ${j.compared} ${w}/setting pairs compared${j.catalog ? ` · catalog: ${j.catalog.covered} of ${j.catalog.total} settings covered by the matrix` : ''}${notes.length ? ` · <button class="link" id="showNotes">${plural(notes.length, 'note')} about how the files were read</button>` : ''}</p>
       <div id="notesBox" hidden>${notesBlock('', notes)}</div></div>

@@ -214,7 +214,10 @@
   const fileOpts = p => ({ ignoreSubjects: p === 'b' ? $('bIgnore').value : '', sheet: $(p + 'Sheet').value, layout: $(p + 'Layout').value, orientation: $(p + 'Orient').value, rolesSheet: p === 'b' ? $('bRoles').value : '', blankIsNo: p === 'a' ? $('aBlank').value === 'no' : true, subjectCol: $(p + 'UserCol').value, permissionCol: $(p + 'PermCol').value, valueCol: $(p + 'ValCol').value, categoryCol: $(p + 'CatCol').value });
   const body = () => ({ baseline: files.baseline, actual: files.actual, actuals: actuals.map(a => ({ name: a.name, data: a.data, role: a.role })), aliases: files.aliases, catalog: files.catalog, options: { baseline: fileOpts('b'), actual: fileOpts('a'), ignoreUsers: $('ignoreUsers').value, ignorePermissions: $('ignorePerms').value, onlyUsers: $('onlyUsers').value, matchByName: $('matchByName').checked, reportUnknownPermissions: $('unknownPerms').checked } });
   const canRun = () => { $('run').disabled = !(files.baseline && (files.actual || actuals.length)); $('doc').disabled = !(files.actual || actuals.length); };
-  const guessRole = fname => { const stem = fname.replace(/\.[^.]+$/, '').replace(/[_\-]+/g, ' ').trim().toLowerCase(); return baselineRoles.find(r => stem === r.toLowerCase()) || baselineRoles.find(r => stem.includes(r.toLowerCase()) || r.toLowerCase().includes(stem)) || ''; };
+  // The role a file belongs to, from its name: "Billing.xlsx", "Diabetes RN-RD (Diabetes RN-RD).xlsx" → the matrix
+  // column it matches once punctuation and a parenthetical are ignored (longest match wins).
+  const norm = s => String(s).toLowerCase().replace(/\(.*$/, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const guessRole = fname => { const stem = norm(fname.replace(/\.[^.]+$/, '')); if (!stem) return ''; const exact = baselineRoles.find(r => norm(r) === stem); if (exact) return exact; return baselineRoles.filter(r => norm(r) && (stem.includes(norm(r)) || norm(r).includes(stem))).sort((a, b) => norm(b).length - norm(a).length)[0] || ''; };
 
   // ── file slots ──
   const DROP_TEXT = { b: 'Drop the matrix here', a: 'Drop the exports here', c: 'Drop the catalog here' };
@@ -370,12 +373,7 @@
   function render() {
     const j = last, c = j.bySeverity, w = subjectWord();
     const notes = [...(j.baseline.warnings || []).map(x => 'Matrix: ' + x), ...(j.actual.warnings || []).map(x => 'eCW: ' + x)];
-    const toFix = j.actions.filter(a => a.remove.length || a.grant.length), toReview = j.actions.filter(a => !a.remove.length && !a.grant.length);
-    const removeN = j.actions.reduce((n, a) => n + a.remove.length, 0), grantN = j.actions.reduce((n, a) => n + a.grant.length, 0), reviewN = j.actions.reduce((n, a) => n + a.review.length + (a.status ? 1 : 0), 0);
-    const clean = j.detail.filter(d => d.inBaseline && d.inEcw && !j.actions.some(a => a.user === d.user)).length;
-    let big, sub;
-    if (j.pass) { big = `eCW matches the matrix`; sub = `${plural(j.users.both, w)} compared, ${j.compared} settings checked, nothing to change.${reviewN ? ` ${plural(reviewN, 'item')} to review.` : ''}`; }
-    else { big = `${plural(toFix.length + toReview.filter(a => a.status).length, w)} need${toFix.length + toReview.filter(a => a.status).length === 1 ? 's' : ''} attention`; sub = [removeN ? `remove ${plural(removeN, 'permission')}` : '', grantN ? `grant ${plural(grantN, 'permission')}` : '', reviewN ? `review ${plural(reviewN, 'item')}` : ''].filter(Boolean).join(', ') + `. ${clean > 0 ? `${plural(clean, w)} ${clean === 1 ? 'matches' : 'match'} the matrix exactly.` : ''}`; }
+    const big = j.summary.verdict.headline, sub = j.summary.verdict.detail;
     $('out').innerHTML = `<div class="verdict ${j.pass ? 'pass' : 'fail'}"><p class="big">${big}</p><p class="sub">${sub}</p>
       <p class="fine">${j.users.baseline} ${w}s in the matrix · ${j.users.ecw} in eCW · ${j.users.both} in both · ${j.compared} ${w}/setting pairs compared${j.catalog ? ` · catalog: ${j.catalog.covered} of ${j.catalog.total} settings covered by the matrix` : ''}${notes.length ? ` · <button class="link" id="showNotes">${plural(notes.length, 'note')} about how the files were read</button>` : ''}</p>
       <div id="notesBox" hidden>${notesBlock('', notes)}</div></div>

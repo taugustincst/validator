@@ -167,9 +167,11 @@ export function compare(baseline, actual, opts = {}) {
       const ar = a.perms.get(pk);
       const base = { user: name, permission: br.permission, expected: show(br), actual: ar ? show(ar) : '', baselineRow: br.row, actualRow: ar?.row };
       let f;
+      const textCell = br.value !== 'Y' && br.value !== 'N';   // the baseline cell holds text, not a tick: a data problem in the baseline, not a grant to make
       if (!ar && a.listedOnly) {   // not in the role's list = the role does not have it
         const nl = { ...base, actual: 'N (not listed)' };
-        f = isGranted(br.value) ? push({ ...nl, type: 'missing', severity: 'medium', note: 'required by the baseline but not in this role\'s eCW list — grant it in eCW' }) : push({ ...nl, type: 'ok', severity: 'info', note: '' });
+        f = textCell ? push({ ...nl, type: 'different', severity: 'medium', note: `the baseline cell says "${br.raw}" instead of a tick — fix the cell; eCW does not grant it` })
+          : isGranted(br.value) ? push({ ...nl, type: 'missing', severity: 'medium', note: 'required by the baseline but not in this role\'s eCW list — grant it in eCW' }) : push({ ...nl, type: 'ok', severity: 'info', note: '' });
       } else if (!ar) {
         if (A.perms.has(pk)) f = push({ ...base, type: 'missing', severity: isGranted(br.value) ? 'medium' : 'info', note: 'setting exists in eCW but is not listed for this role' });
         else { const near = closest(pk, A.perms); f = push({ ...base, type: 'permission-not-in-ecw', severity: 'low', note: `this setting does not appear anywhere in the eCW export — renamed, or a baseline typo${near ? `; closest eCW setting: "${near.name}"` : ''}`, suggestion: near?.name || '' }); }
@@ -177,6 +179,7 @@ export function compare(baseline, actual, opts = {}) {
       else {
         const bg = isGranted(br.value), ag = isGranted(ar.value);
         if (ag && !bg) f = push({ ...base, type: 'excess', severity: 'high', note: 'granted in eCW but not in the baseline — remove in eCW, or approve it in the baseline' });
+        else if (bg && !ag && textCell) f = push({ ...base, type: 'different', severity: 'medium', note: `the baseline cell says "${br.raw}" instead of a tick — fix the cell; eCW does not grant it` });
         else if (bg && !ag) f = push({ ...base, type: 'missing', severity: 'medium', note: 'required by the baseline but not granted in eCW — grant it in eCW' });
         else f = push({ ...base, type: 'different', severity: 'medium', note: `both set, but to different levels — eCW says "${ar.raw}", the baseline "${br.raw}"` });
       }
@@ -239,7 +242,7 @@ export function actions(result) {
   for (const f of result.findings) {
     if (f.type === 'excess') at(f.user).remove.push(f.permission);
     else if (f.type === 'missing' && f.severity !== 'info') at(f.user).grant.push(f.permission);
-    else if (f.type === 'different') at(f.user).review.push(`${f.permission}: eCW has ${f.actual}, baseline wants ${f.expected}`);
+    else if (f.type === 'different') at(f.user).review.push(/instead of a tick/.test(f.note) ? `${f.permission}: ${f.note}` : `${f.permission}: eCW has ${f.actual}, baseline wants ${f.expected}`);
     else if (f.type === 'user-not-in-baseline') at(f.user).status = f.severity === 'high' ? `not in the baseline but holds grants in eCW — add a column for it to the baseline, or retire the role${f.suggestion ? ` (closest baseline role: ${f.suggestion})` : ''}` : 'not in the baseline (no grants) — add it to the baseline or ignore';
     else if (f.type === 'user-not-in-ecw') at(f.user).status = `expected by the baseline but not in eCW — export it from eCW, or retire the baseline column${f.suggestion ? ` (closest eCW role: ${f.suggestion})` : ''}`;
     else if (f.type === 'permission-not-in-baseline' && f.severity === 'low') at(f.user).review.push(`${f.permission}: granted in eCW, not covered by the baseline`);

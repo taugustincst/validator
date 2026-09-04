@@ -12,7 +12,7 @@ export function summaryDoc(result, meta = {}) {
   const reviewN = result.actions.reduce((n, a) => n + a.review.length, 0);
   const missingRoles = result.actions.filter(a => a.status);
   const clean = result.detail.filter(d => d.inBaseline && d.inEcw && !result.actions.some(a => a.user === d.user)).length;
-  const needs = toFix.length + missingRoles.filter(a => !toFix.includes(a)).length;
+  const needs = result.actions.length;   // every role with anything to do: remove, grant, review, or a status
   const headline = result.pass ? 'eCW matches the matrix' : `${plural(needs, 'role')} need${needs === 1 ? 's' : ''} attention`;
   const detail = result.pass
     ? `${plural(result.users.both, 'role')} compared, ${result.compared} settings checked, nothing to change.${reviewN ? ` ${plural(reviewN, 'item')} to review.` : ''}`

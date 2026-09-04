@@ -340,6 +340,17 @@ examples/               sample generator
 test/                   node --test suite (also run on Windows and Linux in GitHub Actions)
 ```
 
+## Verified
+
+- 45 automated tests cover the spreadsheet reader and writer, layout detection, value handling,
+  role and setting matching, every finding type, the catalog, the eCW inventory, the report, the
+  PDF, the CLI, the HTTP routes and the browser bundle's decoder.
+- A round-trip test derives one eCW export per role from a matrix, confirms the comparison is
+  clean, then plants changes and confirms exactly those are found.
+- The same round trip on a real 28-role, 1163-setting practice matrix and eCW's 1147-setting
+  catalog: 31,401 role/setting pairs compared, the planted changes found and nothing else, in
+  under ten seconds from the command line.
+
 ## Limitations
 
 - Legacy `.xls` (Excel 97–2003) is not read; save as `.xlsx` or `.csv` first.
