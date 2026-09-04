@@ -1,9 +1,9 @@
 # eCW Security Settings Validator
 
-Checks the security settings (user permissions) configured in **eClinicalWorks (eCW)** against
-the **baseline spreadsheet** that says what each user or role is supposed to have. It shows you
-what each document contains, pairs the users and settings, and reports every discrepancy as a
-concrete action: what to remove in eCW, what to grant, what to review.
+Documents the security settings **eClinicalWorks (eCW)** grants each role, and checks them
+against the **master matrix** that says what each role is supposed to have. It shows you what each
+document contains, pairs the roles and settings, and reports every discrepancy as a concrete
+action: what to remove in eCW, what to grant, what to review.
 
 Plain Node.js (≥ 20), **no dependencies**: it reads and writes `.xlsx` itself. Nothing leaves the
 machine.
@@ -42,6 +42,20 @@ eCW security settings validation — FAIL
 report written to report.xlsx
 ```
 
+## Documenting what eCW has
+
+```
+ecw-validate document --actual-dir roles/ --catalog Security_Setting.xlsx --out ecw-settings.xlsx
+```
+
+turns the per-role exports into one inventory workbook, no matrix needed: **eCW matrix** (settings
+down, roles across, `X` where the role holds the setting, with the group and eCW's description of
+each setting), **Roles** (each role, its source file, how many settings it holds), **Settings**
+(each setting with the roles that hold it spelled out) and **Source** (when, which files, notes).
+With the catalog, every setting eCW knows is a row, held or not. In the UI it is the *Document
+eCW settings* button, enabled as soon as the exports are dropped. Compare the result with your
+matrix, or adopt it as the new master after review.
+
 ## Run it
 
 ```bash
@@ -63,19 +77,19 @@ otherwise use `node bin/ecw-validate.js`.
 
 ## The web UI
 
-1. **Drop the baseline.** The page immediately shows how it was read: which sheet, whether it was
+1. **Drop the matrix.** The page immediately shows how it was read: which sheet, whether it was
    understood as a grid or a list, every user and setting it found, the values seen, any warnings,
    and the raw rows with the detected header row highlighted. If it read the wrong sheet or column,
    fix it under *Reading options* and the preview updates.
-2. **Drop the eCW export.** Same preview.
-3. **Validate.** A verdict, then four views:
-   - **What to do** — per user: REMOVE (excess access), GRANT (missing access), REVIEW (level
-     mismatches, settings the baseline does not cover), and users that exist on only one side.
-   - **Findings** — every discrepancy, sortable and filterable, worst first.
-   - **Side by side** — pick any user and see every setting with what the baseline says next to
-     what eCW says, colour-coded; toggle *only differences*.
-   - **By setting** and **Matches** — where problems concentrate, and which names were paired by
-     alias or by bare name rather than exactly (so you can check them).
+2. **Drop the eCW exports**, one per role, and name the role beside each (prefilled from the file name).
+3. **Compare.** One sentence — how many roles need attention, how many permissions to remove and
+   grant — then:
+   - **What to change** — per role: remove in eCW (has but shouldn't), grant in eCW (should have
+     but doesn't), review; roles that exist on only one side.
+   - **By role** — every setting for a role with what the matrix says next to what eCW says.
+   - **All differences** — every discrepancy, sortable and filterable.
+   - **Catalog coverage** and **More** — settings the matrix never mentions; where problems
+     concentrate; which names were paired although not identical; how the files were read.
 4. **Download** the Excel report, the findings as CSV, or the whole result as JSON.
 
 ## The inputs

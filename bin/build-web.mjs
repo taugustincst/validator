@@ -77,7 +77,8 @@ const bundle = ['const M = {}; const __links = [];',
 
 // The page: swap the HTTP calls for in-page calls, and (when samples are embedded) open on a worked example.
 let page = read('web/index.html');
-const samples = ['baseline.xlsx', 'ecw-export.xlsx', 'catalog.xlsx'].map(f => [f, fs.readFileSync(path.join(root, 'examples', f)).toString('base64')]);
+const { webSamples } = await import(path.join(root, 'examples', 'make-examples.js'));
+const samples = Object.entries(webSamples()).map(([k, buf]) => [k, buf.toString('base64')]);
 const localApi = `
   // In-page API: the same routes the Node server answers, run here in the browser.
   const __b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };

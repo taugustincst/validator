@@ -6,9 +6,10 @@
 //                      printed once per block, a Category column, a title block above the header
 //   catalog.xlsx     — the settings catalog: Security Setting Name | Description | Type | Security group Name
 // with a handful of deliberate discrepancies so the report has something to show.
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { writeXlsx } from '../src/xlsx.js';
+import { writeXlsx, buildXlsx } from '../src/xlsx.js';
 
 export const ROLES = ['Provider', 'Front Desk', 'Nurse', 'Biller', 'Practice Admin'];
 // [group, name, description, [Provider, Front Desk, Nurse, Biller, Practice Admin]]
@@ -90,10 +91,12 @@ export const DEVIATIONS = [
 export const EXTRA_USER = ['ztemp', { 'Patient Details > Allow Access to Pt Hub': 'Yes', 'Billing > Batches': 'Yes', 'Administration / Users Configuration > Change Password': 'Yes' }];   // in eCW, not in the baseline
 export const EXTRA_SETTING = ['Patient Portal', 'Blast eMsg'];   // in eCW and the catalog, not in the baseline
 
-export function baselineSheets() {
+/** The master matrix by role; with `users`, a second sheet maps users to roles (for a per-user eCW side). */
+export function baselineSheets({ users = true } = {}) {
   const permissions = [['Category', 'Security Setting', 'What it controls', ...ROLES], ...SETTINGS.map(([cat, name, desc, v]) => [cat, name, desc, ...v.map(x => (x ? 'Y' : 'N'))])];
-  const users = [['User', 'Role'], ...USERS];
-  return [{ name: 'Permissions', rows: permissions, widths: [30, 44, 60, 12, 12, 12, 12, 14] }, { name: 'Users', rows: users, widths: [16, 16] }];
+  const sheets = [{ name: 'Permissions', rows: permissions, widths: [30, 44, 60, 12, 12, 12, 12, 14] }];
+  if (users) sheets.push({ name: 'Users', rows: [['User', 'Role'], ...USERS], widths: [16, 16] });
+  return sheets;
 }
 
 export function ecwExportRows() {
@@ -120,12 +123,28 @@ export function catalogRows() {
   return [['Security Setting Name', 'Security Setting Description', 'Security Setting Type', 'Security group Name'], ...all.map(([g, n, d]) => [n, d, 'Old', g])];
 }
 
+/** eCW's per-ROLE export, as Export to Excel writes it: the catalog columns, only the settings the role holds. */
+export function roleExportRows(role) {
+  const ri = ROLES.indexOf(role);
+  const dev = new Map(DEVIATIONS.filter(([u]) => USERS.find(([user]) => user === u)?.[1] === role).map(([, p, v]) => [p, v]));   // the planted differences, by role
+  const rows = [['Security Setting Name', 'Security Setting Description', 'Security Setting Type', 'Security group Name']];
+  for (const [g, n, d, v] of SETTINGS) { const key = `${g} > ${n}`; const has = dev.has(key) ? dev.get(key) !== 'No' : !!v[ri]; if (has) rows.push([n, d, 'Old', g]); }
+  if (role === 'Provider') rows.push([EXTRA_SETTING[1], 'Allow access to send blast eMsg.', 'Old', EXTRA_SETTING[0]]);
+  return rows;
+}
+
+/** The sample set for the web page: the matrix by role (no user list) and one export per role. */
+export function webSamples() { return { 'baseline.xlsx': buildXlsx(baselineSheets({ users: false })), 'catalog.xlsx': buildXlsx([{ name: 'Sheet1', rows: catalogRows() }]), ...Object.fromEntries(ROLES.map(role => [`roles/${role}.xlsx`, buildXlsx([{ name: 'Sheet1', rows: roleExportRows(role) }])])) }; }
+
 export function writeExamples(dir) {
   const b = path.join(dir, 'baseline.xlsx'), a = path.join(dir, 'ecw-export.xlsx'), c = path.join(dir, 'catalog.xlsx');
   writeXlsx(b, baselineSheets());
   writeXlsx(a, [{ name: 'Security Settings', rows: ecwExportRows(), widths: [16, 34, 44, 10], freeze: false, styles: (r) => (r === 3 ? 1 : 0) }]);
   writeXlsx(c, [{ name: 'Sheet1', rows: catalogRows(), widths: [44, 80, 10, 34] }]);
-  return [b, a, c];
+  const rolesDir = path.join(dir, 'roles'); fs.mkdirSync(rolesDir, { recursive: true });
+  const out = [b, a, c];
+  for (const role of ROLES) { const f = path.join(rolesDir, `${role}.xlsx`); writeXlsx(f, [{ name: 'Sheet1', rows: roleExportRows(role), widths: [44, 80, 10, 34] }]); out.push(f); }
+  return out;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

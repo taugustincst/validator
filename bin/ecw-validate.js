@@ -8,7 +8,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
-import { validateToFile, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, textSummary } from '../src/index.js';
+import { validateToFile, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, documentEcw, textSummary } from '../src/index.js';
 
 const [major] = process.versions.node.split('.').map(Number);
 if (major < 20) { process.stderr.write(`ecw-validate needs Node.js 20 or newer (this is ${process.version}). Install it from https://nodejs.org\n`); process.exit(2); }
@@ -19,6 +19,8 @@ Usage
   ecw-validate validate --baseline <file> --actual <file> [--actual <file> …] [--out report.xlsx] [options]
   ecw-validate inspect <file> [--sheet NAME] [--layout long|matrix] [--catalog <file>] ...
   ecw-validate serve [--port 8787] [--host 127.0.0.1] [--open]
+  ecw-validate document --actual "Role=file" [--actual …] | --actual-dir DIR [--catalog <file>] [--out ecw-settings.xlsx]
+                          document what eCW has: one workbook, settings down, roles across, with descriptions — no matrix needed
   ecw-validate template --catalog <file> [--out baseline-template.xlsx] [--roles a,b,c] [--groups "Billing,Progress Notes"]
   ecw-validate example [dir]
 
@@ -109,6 +111,21 @@ async function main(argv) {
     const worst = v.result.bySeverity.high ? 'high' : v.result.bySeverity.medium ? 'medium' : v.result.bySeverity.low ? 'low' : 'none';
     const rank = { none: 0, low: 1, medium: 2, high: 3 };
     return failOn !== 'none' && rank[worst] >= (rank[failOn] ?? 2) ? 1 : 0;
+  }
+
+  if (cmd === 'document') {
+    if (typeof args['actual-dir'] === 'string') { const dir = args['actual-dir']; if (!fs.existsSync(dir)) { process.stderr.write(`error: --actual-dir not found: ${dir}\n`); return 2; } for (const f of fs.readdirSync(dir).filter(f => /\.(xlsx|xlsm|csv|tsv)$/i.test(f) && !f.startsWith('~$')).sort()) (args.actuals ??= []).push(`${f.replace(/\.[^.]+$/, '')}=${path.join(dir, f)}`); }
+    const actuals = (args.actuals || []).filter(a => typeof a === 'string').map(a => { const m = a.match(/^([^=]+)=(.+)$/); return m ? { src: m[2].trim(), role: m[1].trim() } : { src: a, role: args.actuals.length === 1 && typeof args.role === 'string' ? args.role : undefined }; });
+    if (!actuals.length) { process.stderr.write('document needs at least one --actual "Role=file" (or --actual-dir DIR)\n'); return 2; }
+    for (const a of actuals) if (!fs.existsSync(a.src)) { process.stderr.write(`error: eCW export file not found: ${a.src}\n`); return 2; }
+    if (typeof args.catalog === 'string' && !fs.existsSync(args.catalog)) { process.stderr.write(`error: catalog file not found: ${args.catalog}\n`); return 2; }
+    const out = typeof args.out === 'string' ? args.out : 'ecw-settings.xlsx';
+    const d = documentEcw(actuals, { actual: fileOpts(args, 'actual'), catalog: typeof args.catalog === 'string' ? args.catalog : undefined });
+    fs.writeFileSync(out, d.xlsx);
+    const roles = d.sheets[1].rows.length - 1, settings = d.sheets[0].rows.length - 1;
+    process.stdout.write(`wrote ${out}: ${settings} settings × ${roles} role(s) — sheets: eCW matrix, Roles, Settings, Source\n`);
+    for (const w of d.actual.warnings || []) process.stdout.write(`  ! ${w}\n`);
+    return 0;
   }
 
   if (cmd === 'inspect') {

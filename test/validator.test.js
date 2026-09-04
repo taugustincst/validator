@@ -8,14 +8,14 @@ import { fileURLToPath } from 'node:url';
 import { buildXlsx, readXlsx, parseCsv, readSpreadsheet, unzip, zip as buildZip } from '../src/xlsx.js';
 import { normalizeValue, isAnnotated, detectLayout, extractRecords, extractRoleMap, workbookToRecords, findHeaderRow } from '../src/parse.js';
 import { compare, similarity, closest } from '../src/validate.js';
-import { validate, validateToFile, textSummary, findingsCsv, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, catalogCheck } from '../src/index.js';
+import { validate, validateToFile, textSummary, findingsCsv, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, catalogCheck, documentEcw } from '../src/index.js';
 import { detectCatalog, detectCatalogLike, extractRoleList, roleNameFromSheet, lookup } from '../src/catalog.js';
 import { serve } from '../src/server.js';
 import { writeExamples, baselineSheets, ecwExportRows, catalogRows, DEVIATIONS, SETTINGS, CATALOG_EXTRA } from '../examples/make-examples.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ecw-validator-'));
-const [BASELINE, EXPORT, CATALOG] = writeExamples(tmp);
+const [BASELINE, EXPORT, CATALOG, ...ROLE_FILES] = writeExamples(tmp);
 
 // ───────── spreadsheet I/O ─────────
 
@@ -188,7 +188,7 @@ test('validate: the sample pair finds every planted discrepancy and nothing else
   assert.deepEqual(r.bySeverity, { high: 3, medium: 4, low: 2, info: 6 });
   assert.equal(r.findings.filter(f => f.type === 'permission-not-in-baseline').length, 8, 'Blast eMsg is reported once per eCW user');
   const text = textSummary(r, v.meta);
-  assert.match(text, /FAIL[\s\S]*3 high, 4 medium[\s\S]*What to do, per user:[\s\S]*cnguyen\n\s+REMOVE\s+SureScripts > SS EPrescription/);
+  assert.match(text, /FAIL[\s\S]*3 high, 4 medium[\s\S]*What to do, per role:[\s\S]*cnguyen\n\s+REMOVE\s+SureScripts > SS EPrescription/);
   assert.match(text, /gkim\n\s+GRANT\s+Administration \/ Billing Setup > Delete Payments/);
   assert.match(text, /ijones — expected by the baseline but not in eCW/);
   assert.match(text, /Check how the files were read:[\s\S]*"view only"×1/);
@@ -196,7 +196,7 @@ test('validate: the sample pair finds every planted discrepancy and nothing else
   assert.equal(r.detail.find(d => d.user === 'dlee').settings.find(s => s.type === 'different').actual, 'view only');
   assert.equal(r.detail.find(d => d.user === 'ijones').inEcw, false);
   assert.equal(r.bySetting[0].setting.length > 0, true);
-  assert.match(findingsCsv(r), /^severity,type,user,setting/);
+  assert.match(findingsCsv(r), /^severity,type,role,setting/);
   assert.match(v.meta.baselineLayout, /roles expanded to users/);
 });
 
@@ -204,7 +204,7 @@ test('validate: report files are written in xlsx, csv and json; xlsx reads back 
   const x = path.join(tmp, 'out', 'r.xlsx'), c = path.join(tmp, 'r.csv'), j = path.join(tmp, 'r.json');
   validateToFile(BASELINE, EXPORT, x); validateToFile(BASELINE, EXPORT, c); validateToFile(BASELINE, EXPORT, j);
   const wb = readXlsx(x);
-  assert.deepEqual(wb.sheets.map(s => s.name), ['Summary', 'Actions', 'Findings', 'Side by side', 'Users', 'Settings', 'Matches']);
+  assert.deepEqual(wb.sheets.map(s => s.name), ['Summary', 'Actions', 'Findings', 'Side by side', 'Roles', 'Settings', 'Matches']);
   const F = wb.sheets[2]; assert.equal(F.rows[0][0], 'Severity'); assert.equal(F.rows.length, 1 + 15);
   assert.match(wb.sheets[0].rows[1][1], /^FAIL — 3 high, 4 medium/);
   const A = wb.sheets[1]; assert.equal(A.rows[0][2], 'Remove in eCW (excess)'); assert.ok(A.rows.some(r => r[0] === 'efoster' && r[2] === 'Administration / System Admin Setup > Allow Access to Patient Merge' && r[1] === 'Front Desk'));
@@ -312,7 +312,7 @@ test('compare: an unmatched user gets its closest counterpart as a suggestion, n
   const r = compare([rec('jsmith', 'A', 'Y'), rec('mjones', 'A', 'Y')], [rec('JSMITH2', 'A', 'Yes'), rec('mjones', 'A', 'Yes')]);
   const gone = r.findings.find(f => f.type === 'user-not-in-ecw'); assert.equal(gone.user, 'jsmith'); assert.equal(gone.suggestion, 'JSMITH2');
   const extra = r.findings.find(f => f.type === 'user-not-in-baseline'); assert.equal(extra.user, 'JSMITH2'); assert.equal(extra.suggestion, 'jsmith');
-  assert.match(r.actions.find(a => a.user === 'jsmith').status, /closest eCW user: JSMITH2/);
+  assert.match(r.actions.find(a => a.user === 'jsmith').status, /closest eCW role: JSMITH2/);
   assert.ok(similarity('lock progress notes', 'lock progress note') > 0.9);
   assert.ok(similarity('billing', 'scheduling') < 0.6);
   assert.equal(closest('zzzz', new Map([['abcd', 'abcd']])), null);
@@ -418,7 +418,7 @@ test('catalog: findings carry group + description, baseline typos are flagged wi
   // The report gains Coverage and Not-in-catalog sheets, and Findings gets Group / What it controls columns
   const out = path.join(tmp, 'cat-report.xlsx'); validateToFile(BASELINE, EXPORT, out, { catalog: CATALOG });
   const wb = readXlsx(out);
-  assert.deepEqual(wb.sheets.map(s => s.name), ['Summary', 'Actions', 'Findings', 'Side by side', 'Users', 'Settings', 'Matches', 'Coverage', 'Not in catalog']);
+  assert.deepEqual(wb.sheets.map(s => s.name), ['Summary', 'Actions', 'Findings', 'Side by side', 'Roles', 'Settings', 'Matches', 'Coverage', 'Not in catalog']);
   assert.deepEqual(wb.sheets[2].rows[0].slice(3, 6), ['Security setting', 'Group', 'What it controls']);
   const cov = wb.sheets[7]; assert.equal(cov.rows.length, 1 + cat.settings.length); assert.ok(cov.rows.some(r => r[1] === 'Blast eMsg' && r[3] === 'N' && r[4] === 2));
   assert.ok(wb.sheets[0].rows.some(r => r[0] === 'Catalog settings' && r[1] === cat.settings.length));
@@ -605,13 +605,13 @@ test('role export: CLI takes one --actual per role ("Role=file"), --role for one
   const run = (...a) => spawnSync(process.execPath, [path.join(root, 'bin/ecw-validate.js'), ...a], { encoding: 'utf8' });
   const matrix = [['Security Item', 'Description', 'Security Group Name', 'Provider', 'Nurse'], ...SETTINGS.map(([g, n, d, v]) => [n, d, g, v[0] ? 'X' : '', v[2] ? 'X' : ''])];
   const bf = path.join(tmp, 'matrix3.xlsx'); fs.writeFileSync(bf, buildXlsx([{ name: 'M', rows: matrix }]));
-  const dir = path.join(tmp, 'roles'); fs.mkdirSync(dir, { recursive: true });
+  const dir = path.join(tmp, 'roles-cli'); fs.mkdirSync(dir, { recursive: true });
   const prov = roleExport((g, n) => SETTINGS.find(s => s[1] === n)[3][0] === 1, false), nurse = roleExport((g, n) => SETTINGS.find(s => s[1] === n)[3][2] === 1, false);
   fs.writeFileSync(path.join(dir, 'Provider.xlsx'), buildXlsx([{ name: 'S', rows: prov }])); fs.writeFileSync(path.join(dir, 'Nurse.xlsx'), buildXlsx([{ name: 'S', rows: nurse }]));
   let r = run('validate', '--baseline', bf, '--actual', `Provider=${path.join(dir, 'Provider.xlsx')}`, '--actual', `Nurse=${path.join(dir, 'Nurse.xlsx')}`, '--quiet');
   assert.equal(r.status, 0, r.stderr + r.stdout); assert.match(r.stdout, /^PASS/);
   r = run('validate', '--baseline', bf, '--actual-dir', dir, '--quiet'); assert.equal(r.status, 0, r.stderr + r.stdout); assert.match(r.stdout, /^PASS/);
-  r = run('validate', '--baseline', bf, '--actual', path.join(dir, 'Provider.xlsx'), '--role', 'Provider', '--fail-on', 'none'); assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /Nurse — expected by the baseline but not in eCW/);
+  r = run('validate', '--baseline', bf, '--actual', path.join(dir, 'Provider.xlsx'), '--role', 'Provider', '--fail-on', 'none'); assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /Nurse — expected by the baseline but not in eCW — export it from eCW/);
   r = run('validate', '--baseline', bf, '--actual', path.join(dir, 'Provider.xlsx')); assert.equal(r.status, 2); assert.match(r.stderr, /CATALOG[\s\S]*--role/);
   r = run('inspect', path.join(dir, 'Provider.xlsx'), '--role', 'Provider'); assert.equal(r.status, 0); assert.match(r.stdout, /per-role export for "Provider"/);
   const s = await serve({ port: 0 });
@@ -634,4 +634,46 @@ test('inflate: the plain-JS decoder matches node:zlib on stored, fixed and dynam
   same(rand, 'mixed random'); same(Buffer.alloc(70000, 7), 'long run'); same(Buffer.from('x'.repeat(100000) + 'y'.repeat(70000)), 'two runs');
   for (const f of [BASELINE, EXPORT, CATALOG]) { const z = unzip(fs.readFileSync(f)); for (const n of z.names()) assert.ok(z.get(n).length >= 0, n); }
   assert.throws(() => inflateRaw(Buffer.from([7, 0])), /invalid block type/);
+});
+
+// ───────── documenting eCW: the per-role exports as one inventory workbook ─────────
+
+test('document: the sample per-role exports become an eCW matrix (settings down, roles across) with descriptions, and compare cleanly except for the planted differences', () => {
+  const actuals = ROLE_FILES.map(f => ({ src: f, role: path.basename(f, '.xlsx') }));
+  const d = documentEcw(actuals, { catalog: CATALOG });
+  assert.deepEqual(d.sheets.map(s => s.name), ['eCW matrix', 'Roles', 'Settings', 'Source']);
+  const M = d.sheets[0].rows;
+  assert.deepEqual(M[0], ['Group', 'Security setting', 'What it controls', 'Provider', 'Front Desk', 'Nurse', 'Biller', 'Practice Admin', 'Roles holding it', 'In catalog'], 'roles in the order the files were given');
+  assert.equal(M.length, 1 + SETTINGS.length + CATALOG_EXTRA.length, 'with the catalog, every eCW setting is a row even if no role holds it');
+  const row = M.find(r => r[1] === 'Delete Payments');
+  assert.deepEqual(row.slice(3, 8), ['', '', '', '', 'X'], 'Biller had Delete Payments removed in eCW; Practice Admin has it');
+  assert.equal(row[8], 1); assert.equal(row[2], 'Grants or denies users permission to delete both patient and insurance payments');
+  const lock = M.find(r => r[1] === 'Lock Chart'); assert.equal(lock[3], '', 'Provider lost Lock Chart in eCW');
+  const R = d.sheets[1].rows; assert.equal(R.length, 6); assert.deepEqual(R[1].slice(0, 3), ['Provider', 'Provider.xlsx', 14]);
+  assert.match(d.sheets[3].rows.find(r => r[0] === 'Catalog')[1], /catalog\.xlsx \(\d+ settings\)/);
+  // without a catalog, groups and descriptions come from the exports themselves
+  const d2 = documentEcw(actuals);
+  assert.equal(d2.sheets[0].rows[0].length, 9); assert.equal(d2.sheets[0].rows.find(r => r[1] === 'Delete Payments')[0], 'Administration / Billing Setup');
+  // and the same exports, compared with the matrix, show exactly the planted role-level differences
+  const rolesOnly = path.join(tmp, 'matrix-roles.xlsx'); fs.writeFileSync(rolesOnly, buildXlsx(baselineSheets({ users: false })));
+  const v = validate(rolesOnly, actuals, { catalog: CATALOG });
+  assert.equal(v.result.users.both, 5);
+  const types = v.result.findings.filter(f => f.severity !== 'info').map(f => `${f.user}|${f.type}|${f.permission}`).sort();
+  assert.deepEqual(types.filter(t => /excess|missing/.test(t)), ['Biller|missing|Administration / Billing Setup > Delete Payments', 'Front Desk|excess|Administration / System Admin Setup > Allow Access to Patient Merge', 'Nurse|excess|SureScripts > SS EPrescription', 'Provider|missing|Progress Notes > Lock Chart']);
+});
+
+test('document: CLI and API', async () => {
+  const run = (...a) => spawnSync(process.execPath, [path.join(root, 'bin/ecw-validate.js'), ...a], { encoding: 'utf8' });
+  const out = path.join(tmp, 'ecw-settings.xlsx');
+  let r = run('document', '--actual-dir', path.dirname(ROLE_FILES[0]), '--catalog', CATALOG, '--out', out);
+  assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /wrote .*ecw-settings\.xlsx: \d+ settings × 5 role\(s\)/);
+  assert.equal(readXlsx(out).sheets[0].rows[0][3], 'Biller', '--actual-dir reads files in name order');
+  r = run('document'); assert.equal(r.status, 2); assert.match(r.stderr, /needs at least one --actual/);
+  const s = await serve({ port: 0 });
+  try {
+    const u = `http://127.0.0.1:${s.port}`; const b64 = f => fs.readFileSync(f).toString('base64');
+    const res = await fetch(u + '/api/document', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ actuals: ROLE_FILES.map(f => ({ name: path.basename(f), data: b64(f), role: path.basename(f, '.xlsx') })), catalog: { name: 'c.xlsx', data: b64(CATALOG) } }) });
+    assert.equal(res.status, 200); assert.match(res.headers.get('content-disposition'), /ecw-security-settings-\d{4}-\d\d-\d\d\.xlsx/);
+    const wb = readXlsx(Buffer.from(await res.arrayBuffer())); assert.equal(wb.sheets[0].name, 'eCW matrix'); assert.equal(wb.sheets[0].rows.length, 1 + SETTINGS.length + CATALOG_EXTRA.length);
+  } finally { await s.close(); }
 });

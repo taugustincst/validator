@@ -23,7 +23,7 @@ import { lookup, bareName } from './catalog.js';
 export const SEVERITY = { high: 3, medium: 2, low: 1, info: 0 };
 export const TYPE_LABEL = {
   ok: 'OK', excess: 'Excess access', missing: 'Missing access', different: 'Different level',
-  'user-not-in-baseline': 'User not in baseline', 'user-not-in-ecw': 'User not in eCW',
+  'user-not-in-baseline': 'Role not in baseline', 'user-not-in-ecw': 'Role not in eCW',
   'permission-not-in-baseline': 'Setting not in baseline', 'permission-not-in-ecw': 'Setting not in eCW',
 };
 
@@ -150,7 +150,7 @@ export function compare(baseline, actual, opts = {}) {
     if (!a) {
       const granted = [...b.perms.values()].filter(r => isGranted(r.value)).length;
       const near = closest(name, userNamesA);
-      const f = push({ type: 'user-not-in-ecw', severity: 'medium', user: name, permission: '', expected: `${b.perms.size} settings (${granted} granted)`, actual: '', note: `user is in the baseline but not in the eCW export — not set up, deactivated, or spelled differently${near ? `; closest eCW user: "${near.name}"` : ''}`, suggestion: near?.name || '' });
+      const f = push({ type: 'user-not-in-ecw', severity: 'medium', user: name, permission: '', expected: `${b.perms.size} settings (${granted} granted)`, actual: '', note: `role is in the baseline but not in the eCW exports — no export for it, or spelled differently${near ? `; closest eCW role: "${near.name}"` : ''}`, suggestion: near?.name || '' });
       row.finding = f;
       for (const [pk, br] of b.perms) row.settings.push({ permission: br.permission, expected: show(br), actual: '', type: 'user-not-in-ecw', severity: isGranted(br.value) ? 'medium' : 'info' });
       continue;
@@ -158,7 +158,7 @@ export function compare(baseline, actual, opts = {}) {
     if (!b) {
       const grants = [...a.perms.values()].filter(r => isGranted(r.value));
       const near = closest(name, userNamesB);
-      const f = push({ type: 'user-not-in-baseline', severity: grants.length ? 'high' : 'low', user: name, permission: '', expected: '', actual: `${a.perms.size} settings (${grants.length} granted)`, note: (grants.length ? 'eCW user with no baseline: every grant is unreviewed — ' + grants.slice(0, 8).map(r => r.permission).join('; ') + (grants.length > 8 ? '; …' : '') : 'eCW user with no baseline and no grants') + (near ? `; closest baseline user: "${near.name}"` : ''), suggestion: near?.name || '' });
+      const f = push({ type: 'user-not-in-baseline', severity: grants.length ? 'high' : 'low', user: name, permission: '', expected: '', actual: `${a.perms.size} settings (${grants.length} granted)`, note: (grants.length ? 'eCW role with no baseline column: every grant is unreviewed — ' + grants.slice(0, 8).map(r => r.permission).join('; ') + (grants.length > 8 ? '; …' : '') : 'eCW role with no baseline column and no grants') + (near ? `; closest baseline role: "${near.name}"` : ''), suggestion: near?.name || '' });
       row.finding = f;
       for (const [pk, ar] of a.perms) row.settings.push({ permission: ar.permission, expected: '', actual: show(ar), type: 'user-not-in-baseline', severity: isGranted(ar.value) ? 'high' : 'info' });
       continue;
@@ -171,7 +171,7 @@ export function compare(baseline, actual, opts = {}) {
         const nl = { ...base, actual: 'N (not listed)' };
         f = isGranted(br.value) ? push({ ...nl, type: 'missing', severity: 'medium', note: 'required by the baseline but not in this role\'s eCW list — grant it in eCW' }) : push({ ...nl, type: 'ok', severity: 'info', note: '' });
       } else if (!ar) {
-        if (A.perms.has(pk)) f = push({ ...base, type: 'missing', severity: isGranted(br.value) ? 'medium' : 'info', note: 'setting exists in eCW but is not listed for this user' });
+        if (A.perms.has(pk)) f = push({ ...base, type: 'missing', severity: isGranted(br.value) ? 'medium' : 'info', note: 'setting exists in eCW but is not listed for this role' });
         else { const near = closest(pk, A.perms); f = push({ ...base, type: 'permission-not-in-ecw', severity: 'low', note: `this setting does not appear anywhere in the eCW export — renamed, or a baseline typo${near ? `; closest eCW setting: "${near.name}"` : ''}`, suggestion: near?.name || '' }); }
       } else if (br.value === ar.value) f = push({ ...base, type: 'ok', severity: 'info', note: '' });
       else {
@@ -185,7 +185,7 @@ export function compare(baseline, actual, opts = {}) {
     for (const [pk, ar] of a.perms) {
       if (b.perms.has(pk)) continue;
       let f;
-      if (B.perms.has(pk)) f = isGranted(ar.value) ? push({ user: name, permission: ar.permission, type: 'excess', severity: 'high', expected: '', actual: show(ar), actualRow: ar.row, note: 'granted in eCW; the baseline covers this setting but says nothing for this user — remove, or add it to the baseline' }) : push({ user: name, permission: ar.permission, type: 'ok', severity: 'info', expected: '', actual: show(ar), actualRow: ar.row, note: '' });
+      if (B.perms.has(pk)) f = isGranted(ar.value) ? push({ user: name, permission: ar.permission, type: 'excess', severity: 'high', expected: '', actual: show(ar), actualRow: ar.row, note: 'granted in eCW; the baseline covers this setting but says nothing for this role — remove, or add it to the baseline' }) : push({ user: name, permission: ar.permission, type: 'ok', severity: 'info', expected: '', actual: show(ar), actualRow: ar.row, note: '' });
       else if (opts.reportUnknownPermissions !== false) { const near = closest(pk, B.perms); f = push({ user: name, permission: ar.permission, type: 'permission-not-in-baseline', severity: isGranted(ar.value) ? 'low' : 'info', expected: '', actual: show(ar), actualRow: ar.row, note: (isGranted(ar.value) ? 'eCW setting the baseline does not cover, and it is granted — decide and add it to the baseline' : 'eCW setting the baseline does not cover (not granted)') + (near ? `; closest baseline setting: "${near.name}"` : ''), suggestion: near?.name || '' }); }
       else continue;
       row.settings.push({ permission: ar.permission, expected: '', actual: show(ar), type: f.type, severity: f.severity, actualRow: ar.row });
@@ -240,8 +240,8 @@ export function actions(result) {
     if (f.type === 'excess') at(f.user).remove.push(f.permission);
     else if (f.type === 'missing' && f.severity !== 'info') at(f.user).grant.push(f.permission);
     else if (f.type === 'different') at(f.user).review.push(`${f.permission}: eCW has ${f.actual}, baseline wants ${f.expected}`);
-    else if (f.type === 'user-not-in-baseline') at(f.user).status = f.severity === 'high' ? `not in the baseline but holds grants in eCW — add to the baseline or remove the user${f.suggestion ? ` (closest baseline user: ${f.suggestion})` : ''}` : 'not in the baseline (no grants) — add to the baseline or ignore';
-    else if (f.type === 'user-not-in-ecw') at(f.user).status = `expected by the baseline but not in eCW — create the user, or retire the baseline row${f.suggestion ? ` (closest eCW user: ${f.suggestion})` : ''}`;
+    else if (f.type === 'user-not-in-baseline') at(f.user).status = f.severity === 'high' ? `not in the baseline but holds grants in eCW — add a column for it to the baseline, or retire the role${f.suggestion ? ` (closest baseline role: ${f.suggestion})` : ''}` : 'not in the baseline (no grants) — add it to the baseline or ignore';
+    else if (f.type === 'user-not-in-ecw') at(f.user).status = `expected by the baseline but not in eCW — export it from eCW, or retire the baseline column${f.suggestion ? ` (closest eCW role: ${f.suggestion})` : ''}`;
     else if (f.type === 'permission-not-in-baseline' && f.severity === 'low') at(f.user).review.push(`${f.permission}: granted in eCW, not covered by the baseline`);
   }
   return [...per.values()].sort((a, b) => (b.remove.length - a.remove.length) || (b.grant.length - a.grant.length) || a.user.localeCompare(b.user));

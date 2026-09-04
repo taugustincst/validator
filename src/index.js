@@ -9,6 +9,9 @@ import { closest } from './validate.js';
 import { compare } from './validate.js';
 import { buildReport, textSummary, findingsCsv, reportSheets } from './report.js';
 import { workbookToCatalog, detectCatalog, detectCatalogLike, extractCatalog, roleNameFromSheet } from './catalog.js';
+import { documentSheets, buildEcwDocument } from './document.js';
+
+export { documentSheets, buildEcwDocument };
 import { STYLE } from './xlsx.js';
 
 export { workbookToCatalog, detectCatalog, extractCatalog };
@@ -89,6 +92,18 @@ export function loadUsersFile(src) {
   throw new Error(`users file (${nameOf(src, 'users file')}): needs a User column and a Role column`);
 }
 const withUsersFile = o => { if (!o.usersFile) return o; const roleMap = o.usersFile instanceof Map ? o.usersFile : loadUsersFile(o.usersFile); return { ...o, roleMap, roleMapName: typeof o.usersFile === 'string' ? path.basename(o.usersFile) : (o.usersFile?.name || 'users file') }; };
+
+/**
+ * Document what eCW has, with no baseline: load the eCW export(s) (one per role) and build the
+ * inventory workbook. Returns { actual, catalog, sheets, xlsx }.
+ */
+export function documentEcw(actual, opts = {}) {
+  const load = (src, o, label) => { const wb = readAny(src, label); try { return { name: nameOf(src, label), ...workbookToRecords(wb, o || {}) }; } catch (e) { throw new Error(`${label} (${nameOf(src, label)}): ${e.message}`); } };
+  const a = loadActuals(actual, opts.actual, load);
+  const cat = opts.catalog ? (opts.catalog.settings ? opts.catalog : loadCatalog(opts.catalog)) : null;
+  const sheets = documentSheets(a, { catalog: cat });
+  return { actual: a, catalog: cat, sheets, xlsx: buildXlsx(sheets) };
+}
 
 /** Load eCW's settings catalog from a file path or { name, data }. */
 export function loadCatalog(src) {

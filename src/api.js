@@ -2,7 +2,7 @@
 // HTTP with it, and the browser build answers the page's own calls with it in-process. Each route
 // takes the parsed JSON body and returns { status, type, data, filename } where data is a JSON
 // value, a string, or a Buffer.
-import { validate, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, buildReport, findingsCsv } from './index.js';
+import { validate, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, buildReport, findingsCsv, documentEcw } from './index.js';
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 
@@ -48,6 +48,12 @@ export function handle(pathname, body) {
     const roles = Array.isArray(body.roles) && body.roles.length ? body.roles.map(String) : undefined;
     const groups = Array.isArray(body.groups) && body.groups.length ? body.groups.map(String) : null;
     return { status: 200, type: XLSX, data: buildTemplate(cat, { roles, groups }), filename: 'baseline-template.xlsx' };
+  }
+  if (pathname === '/api/document') {   // the eCW inventory workbook: needs the eCW export(s), no baseline
+    const o = body.options || {};
+    const actual = Array.isArray(body.actuals) && body.actuals.length ? body.actuals.map((f, i) => ({ src: toFile(f, `eCW export ${i + 1}`), role: f.role ? String(f.role) : undefined })) : toFile(body.actual, 'eCW export');
+    const d = documentEcw(actual, { actual: perFile(o.actual), catalog: body.catalog?.data ? toFile(body.catalog, 'catalog') : undefined });
+    return { status: 200, type: XLSX, data: d.xlsx, filename: `ecw-security-settings-${new Date().toISOString().slice(0, 10)}.xlsx` };
   }
   if (pathname === '/api/validate' || pathname === '/api/report') {
     const v = runFromBody(body);
