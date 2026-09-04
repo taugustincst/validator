@@ -27,84 +27,108 @@
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 14px/1.5 var(--sans); color: var(--ink); background: var(--bg); }
-  header { padding: 18px 24px 16px; background: var(--card); border-bottom: 1px solid var(--line); display: flex; align-items: baseline; gap: 14px 22px; flex-wrap: wrap; }
+  body { margin: 0; font: 15px/1.5 var(--sans); color: var(--ink); background: var(--bg); }
+  header { padding: 20px 24px 16px; background: var(--card); border-bottom: 1px solid var(--line); }
   header .eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin: 0 0 2px; }
-  header h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.01em; text-wrap: balance; } header p { margin: 0; color: var(--muted); max-width: 70ch; }
-  main { max-width: 1400px; margin: 0 auto; padding: 18px 24px 60px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
-  .card h2 { margin: 0 0 4px; font-size: 15px; font-weight: 600; } .card p.hint { margin: 0 0 10px; color: var(--muted); font-size: 13px; max-width: 80ch; }
-  .drop { border: 1.5px dashed var(--line); border-radius: 6px; padding: 18px 12px; text-align: center; color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s; display: block; background: var(--soft); }
-  .drop.over, .drop:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); } .drop.has { border-style: solid; color: var(--ink); background: var(--card); }
-  .drop input { display: none; } .drop b { color: var(--ink); }
-  details { margin-top: 10px; } summary { cursor: pointer; color: var(--muted); font-size: 13px; }
-  .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; } label { font-size: 12px; color: var(--muted); display: block; }
-  input[type=text], select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; font: inherit; background: var(--card); color: var(--ink); }
-  input[type=text]:focus, select:focus, button:focus-visible, .drop:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .actions { display: flex; gap: 10px; align-items: center; margin: 16px 0; flex-wrap: wrap; }
-  button { font: inherit; font-weight: 500; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; } button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); } button:disabled { opacity: .5; cursor: default; } button.sm { padding: 3px 9px; font-size: 12px; }
-  .verdict { font-size: 19px; font-weight: 600; padding: 12px 16px; border-radius: 6px; border-left: 5px solid; } .verdict.pass { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); } .verdict.fail { background: var(--high-bg); color: var(--high); border-color: var(--high); }
-  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; } .stat { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; min-width: 104px; } .stat b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; } .stat span { color: var(--muted); font-size: 12px; }
-  .stat.high b { color: var(--high); } .stat.medium b { color: var(--med); } .stat.low b { color: var(--low); } .stat.ok b { color: var(--ok); }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; } th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; } th { background: var(--soft); position: sticky; top: 0; user-select: none; white-space: nowrap; font-weight: 600; font-size: 12px; letter-spacing: .02em; } th.sortable { cursor: pointer; } td { font-variant-numeric: tabular-nums; }
-  .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; } .tag.high { background: var(--high-bg); color: var(--high); } .tag.medium { background: var(--med-bg); color: var(--med); } .tag.low { background: var(--low-bg); color: var(--low); } .tag.info { background: var(--soft); color: var(--muted); } .tag.ok { background: var(--ok-bg); color: var(--ok); }
-  .tablewrap { overflow: auto; max-height: 65vh; border: 1px solid var(--line); border-radius: 6px; background: var(--card); }
-  .filters { display: flex; gap: 10px; align-items: center; margin: 12px 0; flex-wrap: wrap; } .filters input[type=text] { width: 260px; }
-  .err { background: var(--high-bg); color: var(--high); padding: 10px 14px; border-radius: 6px; white-space: pre-wrap; margin-top: 10px; }
-  .warn { background: var(--warn-bg); border: 1px solid var(--warn-line); padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-top: 8px; } .warn li { margin: 2px 0; }
-  .muted { color: var(--muted); } .mono { font-family: var(--mono); font-size: 12px; }
-  .peek { margin-top: 10px; font-size: 13px; } .peek .kv { display: grid; grid-template-columns: 110px 1fr; gap: 2px 8px; } .peek .kv div:nth-child(odd) { color: var(--muted); }
-  .chips { display: flex; flex-wrap: wrap; gap: 4px; max-height: 76px; overflow: auto; } .chip { background: var(--soft); border-radius: 999px; padding: 1px 8px; font-size: 12px; white-space: nowrap; } .chip.role { background: var(--low-bg); color: var(--low); }
-  .preview { overflow: auto; max-height: 260px; border: 1px solid var(--line); border-radius: 6px; margin-top: 6px; } .preview table { font-size: 12px; white-space: nowrap; font-family: var(--mono); } .preview td, .preview th { padding: 3px 6px; } .preview tr.hdr td { background: var(--hdr); font-weight: 600; } .preview td.rn { color: var(--muted); background: var(--soft); }
-  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 14px 0 12px; flex-wrap: wrap; } .tabs button { border: none; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 8px 12px; color: var(--muted); } .tabs button.on { border-bottom-color: var(--accent); color: var(--accent); font-weight: 600; }
-  .ucard { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: var(--card); margin-bottom: 8px; } .ucard h4 { margin: 0 0 4px; font-size: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .ucard ul { margin: 2px 0 2px 18px; padding: 0; } .ucard li { margin: 1px 0; } .ucard a { color: var(--accent); }
-  .do { font-weight: 700; font-size: 11px; letter-spacing: .06em; padding: 1px 6px; border-radius: 3px; margin-right: 4px; font-family: var(--mono); } .do.remove { background: var(--high-bg); color: var(--high); } .do.grant { background: var(--med-bg); color: var(--med); } .do.review { background: var(--low-bg); color: var(--low); }
-  .cell { padding: 2px 6px; border-radius: 3px; font-family: var(--mono); font-size: 12px; white-space: nowrap; } .cell.ok { background: var(--ok-bg); } .cell.excess { background: var(--high-bg); } .cell.missing, .cell.different { background: var(--med-bg); } .cell.user-not-in-baseline, .cell.user-not-in-ecw { background: var(--low-bg); } .cell.permission-not-in-baseline, .cell.permission-not-in-ecw { background: var(--soft); color: var(--muted); }
-  .two { display: grid; grid-template-columns: 260px 1fr; gap: 14px; } @media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
-  .ulist { max-height: 65vh; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--card); } .ulist div { padding: 6px 10px; border-bottom: 1px solid var(--line); cursor: pointer; display: flex; justify-content: space-between; gap: 6px; } .ulist div.on { background: var(--accent-soft); font-weight: 600; } .ulist small { color: var(--muted); }
-  footer { margin-top: 30px; color: var(--muted); font-size: 12px; }
-  .legend span { display: inline-block; margin-right: 10px; }
-  .sample { background: var(--accent-soft); border: 1px solid var(--accent); color: var(--ink); border-radius: 6px; padding: 8px 12px; margin: 0 0 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
+  header p { margin: 4px 0 0; color: var(--muted); max-width: 72ch; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 24px 80px; }
+  h2 { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 26px 0 10px; }
+  .muted { color: var(--muted); } .mono { font-family: var(--mono); font-size: 12.5px; }
   a { color: var(--accent); }
+  button { font: inherit; font-weight: 500; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); } button:disabled { opacity: .45; cursor: default; } button.sm { padding: 3px 9px; font-size: 12px; } button.link { border: none; background: none; color: var(--accent); padding: 0; font-weight: 500; }
+  input[type=text], select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; font: inherit; background: var(--card); color: var(--ink); }
+  input[type=text]:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  label { font-size: 12px; color: var(--muted); display: block; }
+  details { margin-top: 8px; } summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 500; list-style: none; } summary::-webkit-details-marker { display: none; } summary::before { content: "▸ "; } details[open] > summary::before { content: "▾ "; }
+
+  /* ── inputs: three tiles, one line of status each ── */
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; } @media (max-width: 860px) { .tiles { grid-template-columns: 1fr; } }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .tile h3 { margin: 0; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; } .tile h3 .num { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 999px; background: var(--soft); color: var(--muted); font-size: 11px; font-weight: 600; }
+  .tile .what { color: var(--muted); font-size: 13px; margin: 0; }
+  .drop { border: 1.5px dashed var(--line); border-radius: 6px; padding: 14px 10px; text-align: center; color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s; display: block; background: var(--soft); font-size: 13px; }
+  .drop.over, .drop:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); } .drop.has { border-style: solid; color: var(--ink); background: var(--card); text-align: left; }
+  .drop input { display: none; } .drop b { color: var(--ink); }
+  .status { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.4; } .status .dot { flex: none; width: 9px; height: 9px; border-radius: 999px; margin-top: 6px; background: var(--line); } .status.ok .dot { background: var(--ok); } .status.warn .dot { background: var(--med); } .status.bad .dot { background: var(--high); }
+  .rolefile { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; font-size: 13px; padding: 6px 0; border-top: 1px solid var(--line); } .rolefile input[type=text] { padding: 4px 8px; font-size: 13px; }
+  .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .kv { display: grid; grid-template-columns: 96px 1fr; gap: 2px 8px; font-size: 13px; } .kv div:nth-child(odd) { color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; max-height: 70px; overflow: auto; } .chip { background: var(--soft); border-radius: 999px; padding: 1px 8px; font-size: 12px; white-space: nowrap; }
+  .preview { overflow: auto; max-height: 240px; border: 1px solid var(--line); border-radius: 6px; margin-top: 6px; } .preview table { font-size: 12px; white-space: nowrap; font-family: var(--mono); } .preview td, .preview th { padding: 3px 6px; } .preview tr.hdr td { background: var(--hdr); font-weight: 600; } .preview td.rn { color: var(--muted); background: var(--soft); }
+  .notes { background: var(--warn-bg); border: 1px solid var(--warn-line); padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-top: 8px; } .notes li { margin: 3px 0; } .notes ul { margin: 4px 0 0 18px; padding: 0; }
+  .err { background: var(--high-bg); color: var(--high); padding: 10px 14px; border-radius: 6px; white-space: pre-wrap; margin-top: 8px; font-size: 13px; }
+
+  /* ── run ── */
+  .runbar { display: flex; gap: 12px; align-items: center; margin: 18px 0 6px; flex-wrap: wrap; }
+  .sample { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 6px; padding: 8px 12px; margin: 0 0 16px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+
+  /* ── results ── */
+  .verdict { border-radius: 8px; padding: 16px 18px; border-left: 6px solid; background: var(--card); border-color: var(--line); margin-top: 18px; }
+  .verdict.pass { border-left-color: var(--ok); } .verdict.fail { border-left-color: var(--high); }
+  .verdict .big { font-size: 22px; font-weight: 600; letter-spacing: -.01em; margin: 0 0 4px; } .verdict.pass .big { color: var(--ok); } .verdict.fail .big { color: var(--high); }
+  .verdict .sub { margin: 0; font-size: 15px; } .verdict .fine { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+  .sev { display: inline-flex; gap: 14px; margin-top: 8px; font-size: 13px; } .sev b { font-variant-numeric: tabular-nums; } .sev .h { color: var(--high); } .sev .m { color: var(--med); } .sev .l { color: var(--low); }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 22px 0 14px; flex-wrap: wrap; } .tabs button { border: none; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 8px 12px; color: var(--muted); } .tabs button.on { border-bottom-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .toolbar { display: flex; gap: 10px; align-items: center; margin: 0 0 12px; flex-wrap: wrap; font-size: 13px; } .toolbar input[type=text] { width: 260px; } .toolbar .sp { flex: 1; }
+  .rcard { background: var(--card); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+  .rcard > summary { padding: 12px 14px; display: flex; gap: 12px; align-items: center; color: var(--ink); font-size: 15px; } .rcard > summary::before { color: var(--muted); }
+  .rcard > summary .name { font-weight: 600; } .rcard > summary .counts { color: var(--muted); font-size: 13px; margin-left: auto; white-space: nowrap; }
+  .rcard .body { padding: 0 14px 12px 34px; }
+  .rcard .body h4 { margin: 8px 0 4px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; } .rcard h4.remove { color: var(--high); } .rcard h4.grant { color: var(--med); } .rcard h4.review { color: var(--low); }
+  .rcard ul { margin: 0; padding: 0 0 0 18px; } .rcard li { margin: 2px 0; } .rcard li .why { color: var(--muted); font-size: 13px; }
+  .rcard .stat { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; } .pill.high { background: var(--high-bg); color: var(--high); } .pill.medium { background: var(--med-bg); color: var(--med); } .pill.low { background: var(--low-bg); color: var(--low); } .pill.info { background: var(--soft); color: var(--muted); } .pill.ok { background: var(--ok-bg); color: var(--ok); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; } th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; } th { background: var(--soft); position: sticky; top: 0; user-select: none; white-space: nowrap; font-weight: 600; font-size: 12px; letter-spacing: .02em; } th.sortable { cursor: pointer; } td { font-variant-numeric: tabular-nums; }
+  .tablewrap { overflow: auto; max-height: 65vh; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+  .cell { padding: 2px 6px; border-radius: 3px; font-family: var(--mono); font-size: 12px; white-space: nowrap; } .cell.ok { background: var(--ok-bg); } .cell.excess { background: var(--high-bg); } .cell.missing, .cell.different { background: var(--med-bg); } .cell.user-not-in-baseline, .cell.user-not-in-ecw { background: var(--low-bg); } .cell.permission-not-in-baseline, .cell.permission-not-in-ecw { background: var(--soft); color: var(--muted); }
+  .two { display: grid; grid-template-columns: 240px 1fr; gap: 14px; } @media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
+  .ulist { max-height: 65vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--card); } .ulist div { padding: 7px 10px; border-bottom: 1px solid var(--line); cursor: pointer; display: flex; justify-content: space-between; gap: 6px; } .ulist div.on { background: var(--accent-soft); font-weight: 600; }
+  .empty { color: var(--muted); padding: 14px; }
+  footer { margin-top: 36px; color: var(--muted); font-size: 12.5px; max-width: 80ch; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
 <header>
-  <div><p class="eyebrow">eClinicalWorks · role permissions audit</p><h1>eCW Security Validator</h1></div>
-  <p>What eCW grants each role, what your master matrix says it should have, and exactly where they differ. Files never leave your browser.</p>
+  <p class="eyebrow">eClinicalWorks · role permissions audit</p>
+  <h1>eCW Security Validator</h1>
+  <p>Compares what eCW grants each role with what your master matrix says it should have, and tells you what to change. Files never leave your browser.</p>
 </header>
 <main>
-  <div id="sampleNote" hidden class="sample"><b>Sample data.</b> These are example files with planted discrepancies, so you can see what the validator does. Drop your own matrix and eCW exports to replace them. <button class="sm" id="clearSamples">Clear samples</button></div>
-  <div class="grid">
-    <div class="card">
-      <h2>1 · Baseline — what users <em>should</em> have</h2>
-      <p class="hint">Your approved permission matrix: settings down, users or roles across, Y/N in the cells — or one row per user + setting. A user → role sheet in the same workbook is used automatically.</p>
-      <label class="drop" id="dropB"><input type="file" id="fileB" accept=".xlsx,.xlsm,.csv,.tsv,.txt"><span>Drop the baseline here or click to choose</span></label>
-      <details><summary>Reading options</summary><div class="opts">
+  <div id="sampleNote" hidden class="sample"><b>Showing sample files</b> with a few planted differences. Drop your own to replace them. <button class="sm" id="clearSamples">Clear samples</button></div>
+
+  <h2>Files</h2>
+  <div class="tiles">
+    <div class="tile">
+      <h3><span class="num">1</span> Your matrix</h3>
+      <p class="what">The standard: settings down, one column per role, X where granted.</p>
+      <label class="drop" id="dropB"><input type="file" id="fileB" accept=".xlsx,.xlsm,.csv,.tsv,.txt"><span>Drop the matrix here</span></label>
+      <div id="statusB"></div>
+      <details><summary>Options</summary><div class="opts">
         <label>Sheet <select id="bSheet"><option value="">auto</option></select></label>
         <label>Layout <select id="bLayout"><option value="">auto</option><option value="matrix">grid</option><option value="long">one row per user + setting</option></select></label>
-        <label>Grid orientation <select id="bOrient"><option value="">auto</option><option value="permissions-down">settings down, users across</option><option value="users-down">users down, settings across</option></select></label>
+        <label>Grid orientation <select id="bOrient"><option value="">auto</option><option value="permissions-down">settings down</option><option value="users-down">roles down</option></select></label>
+        <label>Leave out roles <input type="text" id="bIgnore" placeholder="e.g. eCW SUPPORT*"></label>
         <label>Roles sheet <input type="text" id="bRoles" placeholder="auto"></label>
-        <label>Leave out roles/users (globs) <input type="text" id="bIgnore" placeholder="e.g. eCW SUPPORT*"></label>
         <label>User column <input type="text" id="bUserCol" placeholder="auto"></label>
         <label>Setting column <input type="text" id="bPermCol" placeholder="auto"></label>
         <label>Value column <input type="text" id="bValCol" placeholder="auto"></label>
         <label>Category column <input type="text" id="bCatCol" placeholder="auto"></label>
+        <label style="grid-column:1/-1">Users → roles list (only if the eCW side is per user) <label class="drop" id="dropU" style="padding:6px;margin-top:4px"><input type="file" id="fileU" accept=".xlsx,.csv,.tsv"><span>optional: drop a User | Role file</span></label></label>
       </div></details>
-      <label style="margin-top:8px">Users → roles file <span class="muted">(when the columns are roles and the workbook has no Users sheet: a .csv/.xlsx with User | Role)</span><label class="drop" id="dropU" style="padding:6px;margin-top:4px"><input type="file" id="fileU" accept=".xlsx,.csv,.tsv"><span>optional: drop the user → role list</span></label></label>
       <div id="peekB"></div>
     </div>
-    <div class="card">
-      <h2>2 · eCW export — what roles <em>actually</em> have</h2>
-      <p class="hint">In eCW: Security Settings → pick a role → <b>Export to Excel</b>. eCW exports one role at a time, so drop one file per role (several at once is fine) and say which role each one is. A per-user list (User | Setting | Value) also works.</p>
-      <label class="drop" id="dropA"><input type="file" id="fileA" multiple accept=".xlsx,.xlsm,.csv,.tsv,.txt"><span>Drop the eCW export(s) here or click to choose</span></label>
+    <div class="tile">
+      <h3><span class="num">2</span> eCW exports</h3>
+      <p class="what">In eCW: Security Settings → pick a role → Export to Excel. One file per role; name the role beside each.</p>
+      <label class="drop" id="dropA"><input type="file" id="fileA" multiple accept=".xlsx,.xlsm,.csv,.tsv,.txt"><span>Drop the exports here</span></label>
       <div id="roleFiles"></div>
-      <details><summary>Reading options</summary><div class="opts">
+      <details><summary>Options</summary><div class="opts">
         <label>Sheet <select id="aSheet"><option value="">auto</option><option value="all">all sheets (merge)</option></select></label>
         <label>Layout <select id="aLayout"><option value="">auto</option><option value="matrix">grid</option><option value="long">one row per user + setting</option></select></label>
-        <label>Grid orientation <select id="aOrient"><option value="">auto</option><option value="permissions-down">settings down, users across</option><option value="users-down">users down, settings across</option></select></label>
+        <label>Grid orientation <select id="aOrient"><option value="">auto</option><option value="permissions-down">settings down</option><option value="users-down">users down</option></select></label>
         <label>Blank cells <select id="aBlank"><option value="no">mean "not granted"</option><option value="unknown">are ignored</option></select></label>
         <label>User column <input type="text" id="aUserCol" placeholder="auto"></label>
         <label>Setting column <input type="text" id="aPermCol" placeholder="auto"></label>
@@ -113,38 +137,41 @@
       </div></details>
       <div id="peekA"></div>
     </div>
-  </div>
-  <div class="card" style="margin-top:16px">
-    <h2>3 · eCW settings catalog <span class="muted" style="font-weight:400;font-size:13px">(optional, recommended)</span></h2>
-    <p class="hint">eCW's Security Settings export that lists every setting with its description, type and group (Admin → Security Settings → export; ~1,100 rows, no users). With it, every finding shows the setting's group and what it controls, baseline names eCW does not know are flagged with the closest real name, and you get a coverage view of what the baseline never mentions. Drop it in the wrong slot and it is moved here automatically.</p>
-    <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start">
-      <label class="drop" id="dropC"><input type="file" id="fileC" accept=".xlsx,.xlsm,.csv,.tsv,.txt"><span>Drop the catalog here or click to choose</span></label>
-      <div><button id="tpl" disabled title="A baseline to fill in: one row per catalog setting with a Y/N column per role">Build baseline template</button><br><input type="text" id="tplRoles" placeholder="roles: Provider, Nurse, Front Desk, Biller, Practice Admin" style="margin-top:6px;width:280px"></div>
+    <div class="tile">
+      <h3><span class="num">3</span> eCW catalog <span class="muted" style="font-weight:400;font-size:12px">optional</span></h3>
+      <p class="what">The full settings list export. Adds each setting's description and checks your matrix's names.</p>
+      <label class="drop" id="dropC"><input type="file" id="fileC" accept=".xlsx,.xlsm,.csv,.tsv,.txt"><span>Drop the catalog here</span></label>
+      <div id="statusC"></div>
+      <details><summary>Options</summary><div class="opts" style="grid-template-columns:1fr">
+        <label>Build a blank matrix from the catalog <input type="text" id="tplRoles" placeholder="roles: Provider, Nurse, Front Desk, Biller, Practice Admin"></label>
+        <button id="tpl" disabled class="sm">Build matrix template</button>
+      </div></details>
+      <div id="peekC"></div>
     </div>
-    <div id="peekC"></div>
   </div>
-  <div class="card" style="margin-top:16px">
-    <h2>4 · Comparison options</h2>
-    <div class="opts" style="grid-template-columns: repeat(4, 1fr)">
-      <label>Ignore users (comma-separated, * wildcard) <input type="text" id="ignoreUsers" placeholder="e.g. test*, ecwadmin"></label>
+
+  <details style="margin-top:12px"><summary>Comparison options</summary>
+    <div class="opts" style="grid-template-columns:repeat(3,1fr);max-width:900px">
+      <label>Ignore roles/users (globs) <input type="text" id="ignoreUsers" placeholder="e.g. test*, ecwadmin"></label>
       <label>Ignore settings <input type="text" id="ignorePerms" placeholder="e.g. Labs > *"></label>
-      <label>Only these users <input type="text" id="onlyUsers" placeholder="e.g. jsmith, *nurse*"></label>
-      <label>Aliases file (baseline name, eCW name) <label class="drop" id="dropAl" style="padding:6px"><input type="file" id="fileAl" accept=".xlsx,.csv,.tsv"><span>optional: drop a .csv/.xlsx</span></label></label>
+      <label>Only these roles/users <input type="text" id="onlyUsers" placeholder="e.g. Provider, *Admin*"></label>
+      <label>Aliases file (matrix name, eCW name) <label class="drop" id="dropAl" style="padding:6px;margin-top:4px"><input type="file" id="fileAl" accept=".xlsx,.csv,.tsv"><span>optional: drop a .csv/.xlsx</span></label></label>
+      <label style="display:flex;align-items:center;gap:6px;align-self:end"><input type="checkbox" id="matchByName" checked> pair a setting by name when only the category differs</label>
+      <label style="display:flex;align-items:center;gap:6px;align-self:end"><input type="checkbox" id="unknownPerms" checked> report eCW settings the matrix does not cover</label>
     </div>
-    <div class="actions" style="margin-bottom:0">
-      <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="matchByName" checked> pair a setting by its name when only the category differs</label>
-      <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="unknownPerms" checked> report eCW settings the baseline does not cover</label>
-    </div>
-  </div>
-  <div class="actions">
-    <button class="primary" id="run" disabled>Validate</button>
-    <button id="dlX" disabled>Download report (.xlsx)</button>
-    <button id="dlC" disabled>Findings (.csv)</button>
-    <button id="dlJ" disabled>Result (.json)</button>
+  </details>
+
+  <div class="runbar">
+    <button class="primary" id="run" disabled>Compare</button>
     <span class="muted" id="status"></span>
+    <span style="flex:1"></span>
+    <button id="dlX" disabled>Excel report</button>
+    <button id="dlC" disabled class="sm">CSV</button>
+    <button id="dlJ" disabled class="sm">JSON</button>
   </div>
+
   <div id="out"></div>
-  <footer class="legend"><span><b>High</b> = eCW grants access the baseline does not.</span><span><b>Medium</b> = the baseline requires access eCW lacks, a level mismatch, or a baseline user eCW does not list.</span><span><b>Low / Info</b> = coverage gaps between the two documents.</span></footer>
+  <footer><b>Has but shouldn't</b> = eCW grants it, the matrix does not (remove it in eCW, or approve it in the matrix). <b>Should have but doesn't</b> = the matrix grants it, eCW does not. <b>Review</b> = a level mismatch, or a setting the matrix does not mention.</footer>
 </main>
 <script>
 const M = {}; const __links = [];
@@ -1704,8 +1731,8 @@ window.ECW = M;
   const files = { baseline: null, actual: null, aliases: null, catalog: null, users: null };
   let actuals = [];   // [{ name, data, role, size }] — one eCW export per role
   let autoRun = false;   // the sample run on load: no scrolling away from the top
-  let last = null, sortKey = 'severity', sortDir = 1, tab = 'actions', pickedUser = null;
-  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  let last = null, sortKey = 'severity', sortDir = 1, tab = 'actions', pickedUser = null, baselineRoles = [], lastPeek = { b: null, c: null };
+  const esc = s => String(s ?? '').replace(/\bbaseline\b/g, 'matrix').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const readFile = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res({ name: f.name, data: String(r.result).split(',')[1] || '' }); r.onerror = () => rej(r.error); r.readAsDataURL(f); });
 
   // In-page API: the same routes the Node server answers, run here in the browser.
@@ -1724,146 +1751,235 @@ window.ECW = M;
     }
   };
   window.ECW_SAMPLES = {"baseline.xlsx":"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","ecw-export.xlsx":"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","catalog.xlsx":"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"};
-  const TYPE = { ok: 'OK', excess: 'Excess access', missing: 'Missing access', different: 'Different level', 'user-not-in-baseline': 'User not in baseline', 'user-not-in-ecw': 'User not in eCW', 'permission-not-in-baseline': 'Setting not in baseline', 'permission-not-in-ecw': 'Setting not in eCW' };
+  // Plain words for the finding types.
+  const TYPE = { ok: 'Matches', excess: "Has but shouldn't", missing: "Should have but doesn't", different: 'Different level', 'user-not-in-baseline': 'Not in the matrix', 'user-not-in-ecw': 'Not in eCW', 'permission-not-in-baseline': 'Setting not in the matrix', 'permission-not-in-ecw': 'Setting not in eCW' };
   const RANK = { high: 3, medium: 2, low: 1, info: 0 };
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
   const fileOpts = p => ({ ignoreSubjects: p === 'b' ? $('bIgnore').value : '', sheet: $(p + 'Sheet').value, layout: $(p + 'Layout').value, orientation: $(p + 'Orient').value, rolesSheet: p === 'b' ? $('bRoles').value : '', blankIsNo: p === 'a' ? $('aBlank').value === 'no' : true, subjectCol: $(p + 'UserCol').value, permissionCol: $(p + 'PermCol').value, valueCol: $(p + 'ValCol').value, categoryCol: $(p + 'CatCol').value });
   const body = () => ({ baseline: files.baseline, actual: files.actual, actuals: actuals.map(a => ({ name: a.name, data: a.data, role: a.role })), aliases: files.aliases, catalog: files.catalog, users: files.users, options: { baseline: fileOpts('b'), actual: fileOpts('a'), ignoreUsers: $('ignoreUsers').value, ignorePermissions: $('ignorePerms').value, onlyUsers: $('onlyUsers').value, matchByName: $('matchByName').checked, reportUnknownPermissions: $('unknownPerms').checked } });
-
   const canRun = () => { $('run').disabled = !(files.baseline && (files.actual || actuals.length)); };
+  const guessRole = fname => { const stem = fname.replace(/\.[^.]+$/, '').replace(/[_\-]+/g, ' ').trim().toLowerCase(); return baselineRoles.find(r => stem === r.toLowerCase()) || baselineRoles.find(r => stem.includes(r.toLowerCase()) || r.toLowerCase().includes(stem)) || ''; };
+
+  // ── file slots ──
+  const DROP_TEXT = { b: 'Drop the matrix here', a: 'Drop the exports here', c: 'Drop the catalog here' };
+  function markDrop(p, f, note) { const d = $('drop' + p.toUpperCase()); if (!f) { d.classList.remove('has'); d.querySelector('span').textContent = DROP_TEXT[p]; return; } d.classList.add('has'); d.querySelector('span').innerHTML = `<b>${esc(f.name)}</b>${note ? ` <span class="muted">${esc(note)}</span>` : ''}`; }
   function wire(drop, input, key, after) {
-    const set = async f => { if (!f) return; files[key] = await readFile(f); drop.classList.add('has'); drop.querySelector('span').innerHTML = `<b>${esc(f.name)}</b> · ${(f.size / 1024).toFixed(0)} KB`; canRun(); after && after(); };
+    const set = async f => { if (!f) return; files[key] = await readFile(f); drop.classList.add('has'); drop.querySelector('span').innerHTML = `<b>${esc(f.name)}</b> <span class="muted">${(f.size / 1024).toFixed(0)} KB</span>`; canRun(); after && after(); };
     const setMany = async list => {
       list = [...list].filter(Boolean); if (!list.length) return;
       if (key !== 'actual') return set(list[0]);
       for (const f of list) { const r = await readFile(f); const i = actuals.findIndex(a => a.name === f.name); const entry = { ...r, role: guessRole(f.name), size: f.size }; if (i >= 0) actuals[i] = entry; else actuals.push(entry); }
-      files.actual = null; drop.classList.add('has'); drop.querySelector('span').innerHTML = `<b>${actuals.length} file${actuals.length > 1 ? 's' : ''}</b> · drop more to add`; canRun(); after && after();
+      files.actual = null; drop.classList.add('has'); drop.querySelector('span').innerHTML = `<b>${plural(actuals.length, 'file')}</b> <span class="muted">· drop more to add</span>`; canRun(); after && after();
     };
     input.addEventListener('change', () => setMany(input.files));
     drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
     drop.addEventListener('dragleave', () => drop.classList.remove('over'));
     drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); setMany(e.dataTransfer.files); });
   }
-  let baselineRoles = [];   // the baseline's role/user names, to prefill each eCW file's role from its file name
-  const guessRole = fname => { const stem = fname.replace(/\.[^.]+$/, '').replace(/[_\-]+/g, ' ').trim().toLowerCase(); const hit = baselineRoles.find(r => stem === r.toLowerCase()) || baselineRoles.find(r => stem.includes(r.toLowerCase()) || r.toLowerCase().includes(stem)); return hit || ''; };
-  wire($('dropB'), $('fileB'), 'baseline', () => peek('b')); wire($('dropA'), $('fileA'), 'actual', () => peekActuals()); wire($('dropAl'), $('fileAl'), 'aliases'); wire($('dropC'), $('fileC'), 'catalog', () => { peek('c'); if (files.baseline) peek('b'); }); wire($('dropU'), $('fileU'), 'users', () => peek('b'));
-  $('bIgnore').addEventListener('change', () => peek('b'));
-  const SLOT = { b: 'baseline', a: 'actual', c: 'catalog' };
-  function markDrop(p, f, note) { const d = $('drop' + p.toUpperCase()); if (!f) { d.classList.remove('has'); d.querySelector('span').textContent = p === 'c' ? 'Drop the catalog here or click to choose' : p === 'b' ? 'Drop the baseline here or click to choose' : 'Drop the eCW export here or click to choose'; return; } d.classList.add('has'); d.querySelector('span').innerHTML = `<b>${esc(f.name)}</b>${note ? ` <span class="muted">${esc(note)}</span>` : ''}`; }
+  wire($('dropB'), $('fileB'), 'baseline', () => peek('b')); wire($('dropA'), $('fileA'), 'actual', () => peekActuals()); wire($('dropAl'), $('fileAl'), 'aliases');
+  wire($('dropC'), $('fileC'), 'catalog', () => { peek('c'); if (files.baseline) peek('b'); }); wire($('dropU'), $('fileU'), 'users', () => peek('b'));
   for (const id of ['Sheet', 'Layout', 'Orient', 'UserCol', 'PermCol', 'ValCol', 'CatCol']) { $('b' + id).addEventListener('change', () => peek('b')); $('a' + id).addEventListener('change', () => peekActuals()); }
-  $('bRoles').addEventListener('change', () => peek('b')); $('aBlank').addEventListener('change', () => peekActuals());
+  $('bRoles').addEventListener('change', () => peek('b')); $('bIgnore').addEventListener('change', () => peek('b')); $('aBlank').addEventListener('change', () => peekActuals());
 
-  // ── "what is in this file": inspect on drop and on every option change ──
+  // One line of status per file; everything else behind "Details".
+  const statusLine = (cls, text) => `<div class="status ${cls}"><span class="dot"></span><span>${text}</span></div>`;
+  const notesBlock = (title, list) => list?.length ? `<div class="notes"><b>${esc(title)}</b><ul>${list.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : '';
+  function rawRows(x, usedSet) {
+    let h = '';
+    for (const s of x.sheets) h += `<div style="margin-top:6px"><b>${esc(s.name)}</b> <span class="muted">${s.rows} rows × ${s.cols} cols${usedSet.has(s.name) ? ' · used' : x.error ? '' : ' · not used'}</span></div><div class="preview"><table>${s.preview.map((r, i) => `<tr class="${i + 1 === s.headerRow ? 'hdr' : ''}"><td class="rn">${i + 1}</td>${Array.from({ length: Math.min(12, s.cols) }, (_, c) => `<td>${esc(r[c] ?? '')}</td>`).join('')}</tr>`).join('')}</table></div>`;
+    return h;
+  }
   async function peek(p) {
-    const key = SLOT[p]; if (!files[key]) return;
-    const box = $('peek' + p.toUpperCase()); box.innerHTML = '<div class="muted peek">reading…</div>';
+    const key = p === 'b' ? 'baseline' : 'catalog'; if (!files[key]) return;
+    const st = $('status' + p.toUpperCase()), box = $('peek' + p.toUpperCase());
+    st.innerHTML = statusLine('', 'reading…'); box.innerHTML = '';
     let x;
     try { const r = await post('/api/inspect', { file: files[key], options: p === 'c' ? {} : fileOpts(p), label: key, users: p === 'b' ? files.users : null, catalog: p === 'b' ? files.catalog : null }); x = await r.json(); if (!r.ok) throw new Error(x.error || r.statusText); }
-    catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
-    // A catalog dropped in the baseline or eCW slot is moved to the catalog slot, and the person is told.
-    if (x.kind === 'catalog' && p !== 'c') {
-      files.catalog = files[key]; files[key] = null; markDrop(p, null); markDrop('c', files.catalog, '· moved here: this is the settings catalog');
-      box.innerHTML = `<div class="warn"><b>${esc(x.name)}</b> is eCW's <b>settings catalog</b> (setting name, description, type, group — ${x.records} settings, no users, no grants), so it cannot be the ${key === 'baseline' ? 'baseline' : 'eCW export'}. It has been moved to the catalog slot below. For the eCW side, export the <b>per-user</b> security settings (one row per user and setting).</div>`;
-      $('run').disabled = !(files.baseline && files.actual); peek('c'); return;
+    catch (e) { st.innerHTML = statusLine('bad', esc(e.message)); return; }
+    lastPeek[p] = x;
+    // A catalog dropped in the matrix slot is moved to the catalog slot.
+    if (x.kind === 'catalog' && p === 'b') {
+      files.catalog = files.baseline; files.baseline = null; markDrop('b', null); markDrop('c', files.catalog, '· moved here: this is the catalog');
+      st.innerHTML = statusLine('warn', `<b>${esc(x.name)}</b> is eCW's settings catalog (no roles, no grants), so it cannot be the matrix. It has been moved to slot 3.`);
+      canRun(); peek('c'); return;
     }
     if (p === 'c') {
       $('tpl').disabled = x.kind !== 'catalog';
-      if (x.kind !== 'catalog') { box.innerHTML = `<div class="err">This does not look like the settings catalog (expected columns like Security Setting Name / Description / Type / Security group Name).${x.error ? ' ' + esc(x.error) : ''}</div>`; return; }
-      box.innerHTML = `<div class="peek"><div class="kv"><div>Read as</div><div><b>${esc(x.readAs)}</b> from sheet “${esc(x.sheet)}”</div><div>Found</div><div><b>${x.records}</b> settings in <b>${x.groups.length}</b> groups</div><div>Groups</div><div class="chips">${x.groups.map(g => `<span class="chip">${esc(g.group)} <span class="muted">${g.settings}</span></span>`).join('')}</div></div>
-        <details style="margin-top:8px"><summary>First settings as read</summary><div class="preview"><table><tr><th>row</th><th>setting</th><th>group</th><th>what it controls</th></tr>${x.sample.map(r => `<tr><td class="rn">${r.row}</td><td>${esc(r.setting)}</td><td>${esc(r.value)}</td><td class="muted">${esc(r.raw)}</td></tr>`).join('')}</table></div></details></div>`;
+      if (x.kind !== 'catalog') { st.innerHTML = statusLine('bad', `This does not look like the catalog (expected Security Setting Name / Description / Type / Security group Name).${x.error ? ' ' + esc(x.error) : ''}`); return; }
+      st.innerHTML = statusLine('ok', `<b>${x.records} settings</b> in ${x.groups.length} groups.`);
+      box.innerHTML = `<details><summary>Details</summary><div class="kv" style="margin-top:6px"><div>Groups</div><div class="chips">${x.groups.map(g => `<span class="chip">${esc(g.group)} <span class="muted">${g.settings}</span></span>`).join('')}</div></div><div class="preview"><table><tr><th>row</th><th>setting</th><th>group</th><th>what it controls</th></tr>${x.sample.map(r => `<tr><td class="rn">${r.row}</td><td>${esc(r.setting)}</td><td>${esc(r.value)}</td><td class="muted">${esc(r.raw)}</td></tr>`).join('')}</table></div></details>`;
       return;
     }
-    // sheet picker follows the file
-    const sel = $(p + 'Sheet'); const cur = sel.value; sel.innerHTML = `<option value="">auto</option><option value="all">all sheets (merge)</option>` + x.sheets.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join(''); sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
+    // the matrix
+    const sel = $('bSheet'); const cur = sel.value; sel.innerHTML = `<option value="">auto</option><option value="all">all sheets (merge)</option>` + x.sheets.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join(''); sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
+    if (x.error) { st.innerHTML = statusLine('bad', `Could not read it as a permission matrix: ${esc(x.error)} <span class="muted">Try the options.</span>`); box.innerHTML = `<details><summary>Raw rows</summary>${rawRows(x, new Set())}</details>`; return; }
+    baselineRoles = x.users.map(u => u.name);
+    if (actuals.length) { for (const a of actuals) if (!a.role) a.role = guessRole(a.name); peekActuals(); }
+    const roleWord = x.expanded ? 'users' : /grid/.test(x.readAs) ? 'roles' : 'users';
+    const notes = (x.warnings || []).filter(w => !/columns look like ROLES/.test(w));
+    const unknown = x.catalogCheck?.unknown?.length || 0;
+    const cls = notes.length || unknown ? 'warn' : 'ok';
+    st.innerHTML = statusLine(cls, `<b>${x.users.length} ${roleWord}</b>, <b>${x.settings.length} settings</b>, read as ${esc(x.readAs.replace(/^grid, /, 'a grid: '))}.${unknown ? ` <b>${unknown}</b> setting name${unknown === 1 ? '' : 's'} eCW does not know.` : ''}${notes.length ? ` ${plural(notes.length, 'note')} about the file.` : ''}`);
     const usedSet = new Set(x.sheetsUsed || []);
-    if (p === 'b' && !x.error) { baselineRoles = x.users.map(u => u.name); if (actuals.length) { for (const a of actuals) if (!a.role) a.role = guessRole(a.name); peekActuals(); } }
-    let h = `<div class="peek">`;
-    if (x.error) h += `<div class="err">Could not read permission data: ${esc(x.error)}<br><span class="muted">Pick the sheet, layout or column names under “Reading options”.</span></div>`;
-    else h += `<div class="kv"><div>Read as</div><div><b>${esc(x.readAs)}</b> from sheet “${esc(x.sheet)}”${x.expanded ? ` · ${Object.keys(x.roleMap || {}).length} users mapped to roles` : ''}</div>
-      <div>Found</div><div><b>${x.records}</b> user/setting records · <b>${x.users.length}</b> users · <b>${x.settings.length}</b> settings · values: ${x.values.map(v => `${esc(v.value)} ×${v.count}`).join(', ')}</div>
-      <div>Users</div><div class="chips">${x.users.map(u => `<span class="chip">${esc(u.name)}${u.role ? ` <span class="muted">(${esc(u.role)})</span>` : ''}</span>`).join('')}</div>
-      <div>Settings</div><div class="chips">${x.settings.map(s => `<span class="chip">${esc(s.name)}</span>`).join('')}</div></div>`;
-    if (x.warnings?.length) h += `<div class="warn"><b>Check:</b><ul>${x.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>`;
-    if (x.catalogCheck) { const c = x.catalogCheck; h += `<div class="${c.unknown.length ? 'warn' : 'peek'}" style="margin-top:8px"><b>Against the catalog:</b> ${c.known} of ${x.settings.length} settings are names eCW knows${c.unknown.length ? `; <b>${c.unknown.length}</b> are not (typo, or renamed in this eCW version)` : ''}; ${c.uncovered.length} catalog settings are not in this file.${c.unknown.length ? `<details><summary>Show the ${c.unknown.length} unknown names</summary><ul>${c.unknown.map(u => `<li>${esc(u.name)}${u.suggestion ? ` → closest: <b>${esc(u.suggestion)}</b> <span class="muted">(${esc(u.group)})</span>` : ''}</li>`).join('')}</ul></details>` : ''}</div>`; }
-    h += `<details style="margin-top:8px"><summary>Raw rows as read (${x.sheets.length} sheet${x.sheets.length > 1 ? 's' : ''}; header row highlighted)</summary>`;
-    for (const s of x.sheets) {
-      h += `<div style="margin-top:6px"><b>${esc(s.name)}</b> <span class="muted">${s.rows} rows × ${s.cols} cols${usedSet.has(s.name) ? ' · used' : x.error ? '' : ' · not used'}</span></div><div class="preview"><table>${s.preview.map((r, i) => `<tr class="${i + 1 === s.headerRow ? 'hdr' : ''}"><td class="rn">${i + 1}</td>${Array.from({ length: Math.min(12, s.cols) }, (_, c) => `<td>${esc(r[c] ?? '')}</td>`).join('')}</tr>`).join('')}</table></div>`;
-    }
-    if (!x.error && x.sample?.length) h += `<div style="margin-top:6px"><b>First records after reading</b></div><div class="preview"><table><tr><th>row</th><th>user</th><th>setting</th><th>value</th><th>cell said</th></tr>${x.sample.map(r => `<tr><td class="rn">${r.row}</td><td>${esc(r.user)}</td><td>${esc(r.setting)}</td><td class="mono">${esc(r.value)}</td><td class="mono muted">${esc(r.raw)}</td></tr>`).join('')}</table></div>`;
-    h += `</details></div>`;
-    box.innerHTML = h;
+    box.innerHTML = `<details><summary>Details</summary>
+      <div class="kv" style="margin-top:6px"><div>${roleWord[0].toUpperCase() + roleWord.slice(1)}</div><div class="chips">${x.users.map(u => `<span class="chip">${esc(u.name)}${u.role ? ` <span class="muted">(${esc(u.role)})</span>` : ''}</span>`).join('')}</div>
+      <div>Values</div><div>${x.values.map(v => `${esc(v.value)} ×${v.count}`).join(', ')}</div></div>
+      ${notesBlock('Notes about the file', notes)}
+      ${x.catalogCheck ? `<div class="${unknown ? 'notes' : 'kv'}" style="margin-top:8px"><b>Against the catalog:</b> ${x.catalogCheck.known} of ${x.settings.length} names are ones eCW knows; ${x.catalogCheck.uncovered.length} catalog settings are not in this file.${unknown ? `<ul>${x.catalogCheck.unknown.map(u => `<li>${esc(u.name)}${u.suggestion ? ` → closest: <b>${esc(u.suggestion)}</b> <span class="muted">(${esc(u.group)})</span>` : ''}</li>`).join('')}</ul>` : ''}</div>` : ''}
+      <details><summary>Raw rows as read (header row highlighted)</summary>${rawRows(x, usedSet)}</details>
+      ${x.sample?.length ? `<details><summary>First records after reading</summary><div class="preview"><table><tr><th>row</th><th>${roleWord.slice(0, -1)}</th><th>setting</th><th>value</th><th>cell said</th></tr>${x.sample.map(r => `<tr><td class="rn">${r.row}</td><td>${esc(r.user)}</td><td>${esc(r.setting)}</td><td class="mono">${esc(r.value)}</td><td class="mono muted">${esc(r.raw)}</td></tr>`).join('')}</table></div></details>` : ''}
+    </details>`;
   }
 
-  // ── the eCW side: one card per file, with its role ──
+  // ── the eCW side: one row per file, with its role ──
   async function peekActuals() {
-    const box = $('roleFiles'); const peekBox = $('peekA'); peekBox.innerHTML = '';
+    const box = $('roleFiles');
     if (!actuals.length) { box.innerHTML = ''; return; }
-    box.innerHTML = actuals.map((a, i) => `<div class="ucard" style="margin-top:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>${esc(a.name)}</b><span class="muted">${(a.size / 1024).toFixed(0)} KB</span><label style="flex:1;min-width:220px;margin:0">Role this export belongs to <input type="text" data-role="${i}" value="${esc(a.role)}" list="roleNames" placeholder="e.g. APPS Admin"></label><button class="sm" data-rm="${i}">remove</button></div><div class="peek" data-peek="${i}"><span class="muted">reading…</span></div></div>`).join('') + `<datalist id="roleNames">${baselineRoles.map(r => `<option value="${esc(r)}">`).join('')}</datalist>`;
+    box.innerHTML = actuals.map((a, i) => `<div class="rolefile"><div><b>${esc(a.name)}</b> <span class="muted">${(a.size / 1024).toFixed(0)} KB</span><div data-status="${i}"></div></div><div style="display:flex;gap:6px;align-items:center"><input type="text" data-role="${i}" value="${esc(a.role)}" list="roleNames" placeholder="role" style="width:170px" title="The role this export belongs to"><button class="sm" data-rm="${i}" title="remove">×</button></div><div data-peek="${i}" style="grid-column:1/-1"></div></div>`).join('') + `<datalist id="roleNames">${baselineRoles.map(r => `<option value="${esc(r)}">`).join('')}</datalist>`;
     for (const inp of box.querySelectorAll('input[data-role]')) inp.addEventListener('change', () => { actuals[+inp.dataset.role].role = inp.value.trim(); peekOne(+inp.dataset.role); });
-    for (const b of box.querySelectorAll('button[data-rm]')) b.addEventListener('click', () => { actuals.splice(+b.dataset.rm, 1); if (!actuals.length) { $('dropA').classList.remove('has'); markDrop('a', null); } else $('dropA').querySelector('span').innerHTML = `<b>${actuals.length} file${actuals.length > 1 ? 's' : ''}</b> · drop more to add`; canRun(); peekActuals(); });
+    for (const b of box.querySelectorAll('button[data-rm]')) b.addEventListener('click', () => { actuals.splice(+b.dataset.rm, 1); if (!actuals.length) markDrop('a', null); else $('dropA').querySelector('span').innerHTML = `<b>${plural(actuals.length, 'file')}</b> <span class="muted">· drop more to add</span>`; canRun(); peekActuals(); });
     for (let i = 0; i < actuals.length; i++) peekOne(i);
   }
   async function peekOne(i) {
-    const a = actuals[i]; const el = document.querySelector(`[data-peek="${i}"]`); if (!a || !el) return;
-    let x; try { const r = await post('/api/inspect', { file: { name: a.name, data: a.data }, options: { ...fileOpts('a'), role: a.role }, label: 'eCW export' }); x = await r.json(); if (!r.ok) throw new Error(x.error || r.statusText); } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
-    if (x.kind === 'catalog' && !a.role) { el.innerHTML = `<div class="warn">This file has eCW's catalog columns and names no role. If it is the export for <b>one role</b> (Security Settings → pick the role → Export to Excel), type the role above and it is read as that role's grants (every listed setting = granted${x.hasPermissionColumn ? '' : ', since there is no Permission column'}). If it is the full settings catalog, remove it here and drop it in the Catalog slot.</div>`; return; }
-    if (x.error) { el.innerHTML = `<div class="err">${esc(x.error)}</div>`; return; }
-    const roleBox = document.querySelector(`input[data-role="${i}"]`); if (roleBox) roleBox.closest('label').hidden = x.kind !== 'role-list' && !x.roleExportPossible;   // a per-user list needs no role
-    el.innerHTML = `<div class="kv"><div>Read as</div><div><b>${esc(x.readAs)}</b> from sheet “${esc(x.sheet)}”</div><div>Found</div><div><b>${x.records}</b> records · ${x.users.length} ${x.kind === 'role-list' ? 'role' : 'users/roles'} · <b>${x.settings.length}</b> settings · values: ${x.values.map(v => `${esc(v.value)} ×${v.count}`).join(', ')}</div>${x.kind !== 'role-list' ? `<div>Users</div><div class="chips">${x.users.map(u => `<span class="chip">${esc(u.name)}</span>`).join('')}</div>` : ''}</div>${x.warnings?.length ? `<div class="warn"><b>Check:</b><ul>${x.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}`;
+    const a = actuals[i]; const st = document.querySelector(`[data-status="${i}"]`), el = document.querySelector(`[data-peek="${i}"]`); if (!a || !st) return;
+    st.innerHTML = statusLine('', 'reading…'); el.innerHTML = '';
+    let x; try { const r = await post('/api/inspect', { file: { name: a.name, data: a.data }, options: { ...fileOpts('a'), role: a.role }, label: 'eCW export' }); x = await r.json(); if (!r.ok) throw new Error(x.error || r.statusText); } catch (e) { st.innerHTML = statusLine('bad', esc(e.message)); return; }
+    const roleBox = document.querySelector(`input[data-role="${i}"]`); if (roleBox) roleBox.hidden = x.kind !== 'role-list' && !x.roleExportPossible;
+    if (x.kind === 'catalog' && !a.role) { st.innerHTML = statusLine('warn', 'Which role is this export for? Type it on the right. (If it is the full catalog, remove it here and use slot 3.)'); return; }
+    if (x.error) { st.innerHTML = statusLine('bad', esc(x.error)); return; }
+    const listedOnly = /listed = granted/.test(x.readAs);
+    if (x.kind === 'role-list') st.innerHTML = statusLine('ok', `<b>${esc(x.role)}</b>: ${x.settings.length} settings${listedOnly ? ' listed, read as granted' : ''}.`);
+    else st.innerHTML = statusLine('ok', `${x.users.length} ${x.users.length === 1 ? 'user' : 'users'}, ${x.settings.length} settings, ${esc(x.readAs)}.`);
+    const notes = (x.warnings || []).filter(w => !/no Permission column/.test(w));
+    if (notes.length) el.innerHTML = `<details><summary>${plural(notes.length, 'note')}</summary>${notesBlock('', notes)}</details>`;
   }
-  // ── validate ──
+
+  // ── compare ──
   $('run').addEventListener('click', async () => {
-    $('status').textContent = 'validating…'; $('run').disabled = true; $('out').innerHTML = '';
+    $('status').textContent = 'comparing…'; $('run').disabled = true; $('out').innerHTML = '';
     try {
       const r = await post('/api/validate', body()); const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.statusText);
-      last = j; pickedUser = null; tab = j.pass ? 'sbs' : 'actions'; render(); $('status').textContent = '';
+      last = j; pickedUser = null; tab = 'actions'; render(); $('status').textContent = '';
       for (const id of ['dlX', 'dlC', 'dlJ']) $(id).disabled = false;
       if (!autoRun) $('out').scrollIntoView({ behavior: 'smooth', block: 'start' }); autoRun = false;
     } catch (e) { $('out').innerHTML = `<div class="err">${esc(e.message)}</div>`; $('status').textContent = ''; }
     finally { $('run').disabled = false; }
   });
   const download = async fmt => {
-    $('status').textContent = 'building report…';
+    $('status').textContent = 'building the file…';
     const r = await post('/api/report', { ...body(), format: fmt });
-    if (!r.ok) { $('status').textContent = 'report failed: ' + ((await r.json()).error || r.statusText); return; }
+    if (!r.ok) { $('status').textContent = 'could not build it: ' + ((await r.json()).error || r.statusText); return; }
     const blob = await r.blob(); const name = (r.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1] || `ecw-validation.${fmt}`;
     await saveFile(name, blob); $('status').textContent = '';
   };
-  // Hand a generated file to the person: via the hosting page's download capability when there is one
-  // (an Artifact viewer confirms the save), otherwise the browser's own download.
   async function saveFile(name, blob) {
     if (window.claude && typeof window.claude.use === 'function') {
       try { const dl = await window.claude.use('downloads'); if (dl) { await dl.save({ filename: name, data: blob }); $('status').textContent = `saved ${name}`; return; } }
-      catch (e) { if (e && e.code === 'declined') { $('status').textContent = 'save cancelled'; return; } $('status').textContent = 'could not save: ' + (e && e.message || e); return; }
+      catch (e) { $('status').textContent = e && e.code === 'declined' ? 'save cancelled' : 'could not save: ' + (e && e.message || e); return; }
     }
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }
   $('tpl').addEventListener('click', async () => {
-    if (!files.catalog) return; $('status').textContent = 'building template…';
+    if (!files.catalog) return; $('status').textContent = 'building the template…';
     const roles = $('tplRoles').value.split(',').map(s => s.trim()).filter(Boolean);
     const r = await post('/api/template', { catalog: files.catalog, roles });
-    if (!r.ok) { $('status').textContent = 'template failed: ' + ((await r.json()).error || r.statusText); return; }
-    await saveFile('baseline-template.xlsx', await r.blob()); $('status').textContent += ' — fill in Y/N per role on the Permissions sheet, then drop it in as the baseline';
+    if (!r.ok) { $('status').textContent = 'could not build it: ' + ((await r.json()).error || r.statusText); return; }
+    await saveFile('baseline-template.xlsx', await r.blob()); $('status').textContent += ' — fill in Y/N per role, then drop it in as the matrix';
   });
   $('dlX').addEventListener('click', () => download('xlsx')); $('dlC').addEventListener('click', () => download('csv')); $('dlJ').addEventListener('click', () => download('json'));
 
   // ── results ──
+  const subjectWord = () => (last.actual.files || /role/.test(last.actual.readAs || '') || /grid/.test(last.baseline.readAs || '')) && !/expanded/.test(last.baseline.readAs || '') ? 'role' : 'user';
   function render() {
-    const j = last, c = j.bySeverity;
-    const warn = [...(j.baseline.warnings || []).map(w => 'Baseline: ' + w), ...(j.actual.warnings || []).map(w => 'eCW export: ' + w)];
-    $('out').innerHTML = `<div class="verdict ${j.pass ? 'pass' : 'fail'}">${j.pass ? 'PASS — eCW matches the baseline (no high or medium findings)' : `FAIL — ${c.high} high, ${c.medium} medium finding${c.high + c.medium === 1 ? '' : 's'}`}</div>
-      <p class="muted" style="margin:8px 0 0">Baseline “${esc(j.baseline.name)}”: ${esc(j.baseline.readAs)}, ${j.baseline.records} records. ${j.actual.files ? `eCW exports: ${j.actual.files.map(f => `“${esc(f.name)}” → <b>${esc(f.role || '?')}</b> (${f.records})`).join(', ')}.` : `eCW export “${esc(j.actual.name)}”: ${esc(j.actual.readAs)}, ${j.actual.records} records.`}<br>
-      Users: <b>${j.users.baseline}</b> in baseline · <b>${j.users.ecw}</b> in eCW · <b>${j.users.both}</b> in both. Settings: <b>${j.permissions.baseline}</b> · <b>${j.permissions.ecw}</b> · <b>${j.permissions.both}</b> in both${j.matches.length ? ` (${j.matches.length} paired by alias or name)` : ''}. Compared <b>${j.compared}</b> pairs, <b>${j.counts.ok}</b> match.${j.catalog ? `<br>Catalog “${esc(j.catalogFile.name)}”: <b>${j.catalog.total}</b> settings, <b>${j.catalog.covered}</b> covered by the baseline, <b>${j.catalog.grantedUncovered}</b> not covered but granted to someone in eCW${j.catalog.unknown.length ? `, <b>${j.catalog.unknown.length}</b> baseline name(s) eCW does not know` : ''}.` : ''}</p>
-      ${warn.length ? `<div class="warn"><b>Check how the files were read:</b><ul>${warn.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}
-      <div class="stats"><div class="stat high"><b>${c.high}</b><span>high</span></div><div class="stat medium"><b>${c.medium}</b><span>medium</span></div><div class="stat low"><b>${c.low}</b><span>low</span></div><div class="stat"><b>${c.info}</b><span>info</span></div><div class="stat ok"><b>${j.counts.ok}</b><span>matching</span></div>
-      <div class="stat high"><b>${j.counts.excess}</b><span>excess access</span></div><div class="stat medium"><b>${j.counts.missing}</b><span>missing access</span></div><div class="stat medium"><b>${j.counts.different}</b><span>different level</span></div><div class="stat medium"><b>${j.counts['user-not-in-ecw']}</b><span>users not in eCW</span></div><div class="stat high"><b>${j.counts['user-not-in-baseline']}</b><span>users not in baseline</span></div></div>
-      <div class="tabs">${[['actions', `What to do (${j.actions.length} users)`], ['findings', `Findings (${j.findings.length})`], ['sbs', 'Side by side'], ['settings', `By setting (${j.bySetting.length})`], ['matches', `Matches (${j.matches.length})`], ...(j.catalog ? [['coverage', `Coverage (${j.catalog.total - j.catalog.covered} uncovered)`]] : [])].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+    const j = last, c = j.bySeverity, w = subjectWord();
+    const notes = [...(j.baseline.warnings || []).map(x => 'Matrix: ' + x), ...(j.actual.warnings || []).map(x => 'eCW: ' + x)];
+    const toFix = j.actions.filter(a => a.remove.length || a.grant.length), toReview = j.actions.filter(a => !a.remove.length && !a.grant.length);
+    const removeN = j.actions.reduce((n, a) => n + a.remove.length, 0), grantN = j.actions.reduce((n, a) => n + a.grant.length, 0), reviewN = j.actions.reduce((n, a) => n + a.review.length + (a.status ? 1 : 0), 0);
+    const clean = j.detail.filter(d => d.inBaseline && d.inEcw && !j.actions.some(a => a.user === d.user)).length;
+    let big, sub;
+    if (j.pass) { big = `eCW matches the matrix`; sub = `${plural(j.users.both, w)} compared, ${j.compared} settings checked, nothing to change.${reviewN ? ` ${plural(reviewN, 'item')} to review.` : ''}`; }
+    else { big = `${plural(toFix.length + toReview.filter(a => a.status).length, w)} need${toFix.length + toReview.filter(a => a.status).length === 1 ? 's' : ''} attention`; sub = [removeN ? `remove ${plural(removeN, 'permission')}` : '', grantN ? `grant ${plural(grantN, 'permission')}` : '', reviewN ? `review ${plural(reviewN, 'item')}` : ''].filter(Boolean).join(', ') + `. ${clean > 0 ? `${plural(clean, w)} match the matrix exactly.` : ''}`; }
+    $('out').innerHTML = `<div class="verdict ${j.pass ? 'pass' : 'fail'}"><p class="big">${big}</p><p class="sub">${sub}</p>
+      <p class="fine">${j.users.baseline} ${w}s in the matrix · ${j.users.ecw} in eCW · ${j.users.both} in both · ${j.compared} ${w}/setting pairs compared${j.catalog ? ` · catalog: ${j.catalog.covered} of ${j.catalog.total} settings covered by the matrix` : ''}${notes.length ? ` · <button class="link" id="showNotes">${plural(notes.length, 'note')} about how the files were read</button>` : ''}</p>
+      <div id="notesBox" hidden>${notesBlock('', notes)}</div></div>
+      <div class="tabs">${[['actions', 'What to change'], ['sbs', `By ${w}`], ['findings', `All differences (${j.findings.filter(f => f.severity !== 'info').length})`], ...(j.catalog ? [['coverage', 'Catalog coverage']] : []), ['more', 'More']].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       <div id="panel"></div>`;
+    $('showNotes')?.addEventListener('click', () => { $('notesBox').hidden = !$('notesBox').hidden; });
     for (const b of document.querySelectorAll('.tabs button')) b.addEventListener('click', () => { tab = b.dataset.tab; render(); });
-    ({ actions: panelActions, findings: panelFindings, sbs: panelSbs, settings: panelSettings, matches: panelMatches, coverage: panelCoverage })[tab]();
+    ({ actions: panelActions, findings: panelFindings, sbs: panelSbs, coverage: panelCoverage, more: panelMore })[tab]();
   }
   const roleOf = u => (last.detail.find(d => d.user === u) || {}).role || '';
+  const descOf = (u, p) => (last.detail.find(d => d.user === u)?.settings.find(s => s.permission === p) || {}).description || '';
+
+  function panelActions() {
+    const P = $('panel'); const w = subjectWord();
+    if (!last.actions.length) { P.innerHTML = `<p class="empty">Nothing to change. Every ${w} matches the matrix.</p>`; return; }
+    P.innerHTML = last.actions.map((a, i) => {
+      const n = a.remove.length + a.grant.length + a.review.length;
+      const counts = [a.remove.length ? `<span class="pill high">${a.remove.length} to remove</span>` : '', a.grant.length ? `<span class="pill medium">${a.grant.length} to grant</span>` : '', a.review.length ? `<span class="pill low">${a.review.length} to review</span>` : ''].filter(Boolean).join(' ');
+      const item = p => `<li>${esc(p)}${descOf(a.user, p) ? `<div class="why">${esc(descOf(a.user, p))}</div>` : ''}</li>`;
+      return `<details class="rcard" ${i < 3 ? 'open' : ''}><summary><span class="name">${esc(a.user)}</span>${roleOf(a.user) ? `<span class="muted">${esc(roleOf(a.user))}</span>` : ''}<span class="counts">${counts || (a.status ? `<span class="pill low">${/not in eCW/.test(a.status) ? 'not in eCW' : 'not in the matrix'}</span>` : '')}</span></summary><div class="body">
+        ${a.status ? `<p class="stat">${esc(a.status)}</p>` : ''}
+        ${a.remove.length ? `<h4 class="remove">Remove in eCW — has but shouldn't</h4><ul>${a.remove.map(item).join('')}</ul>` : ''}
+        ${a.grant.length ? `<h4 class="grant">Grant in eCW — should have but doesn't</h4><ul>${a.grant.map(item).join('')}</ul>` : ''}
+        ${a.review.length ? `<h4 class="review">Review</h4><ul>${a.review.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
+        ${n || a.status ? `<p style="margin:8px 0 0"><a href="#" data-user="${esc(a.user)}">See every setting for ${esc(a.user)}</a></p>` : ''}
+      </div></details>`;
+    }).join('');
+    for (const a of P.querySelectorAll('a[data-user]')) a.addEventListener('click', e => { e.preventDefault(); pickedUser = a.dataset.user; tab = 'sbs'; render(); });
+  }
+
+  function panelFindings() {
+    $('panel').innerHTML = `<div class="toolbar"><input type="text" id="q" placeholder="filter"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="hideInfo" checked> hide informational</label><span class="sp"></span><span class="muted" id="n"></span></div>
+      <div class="tablewrap"><table id="t"><thead><tr>${['severity', 'type', 'user', 'permission', 'expected', 'actual', 'note'].map(k => `<th class="sortable" data-k="${k}">${{ severity: 'Severity', type: 'What', user: subjectWord() === 'role' ? 'Role' : 'User', permission: 'Setting', expected: 'Matrix says', actual: 'eCW says', note: 'Detail' }[k]}${sortKey === k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody></tbody></table></div>`;
+    $('q').addEventListener('input', rows); $('hideInfo').addEventListener('change', rows);
+    for (const th of document.querySelectorAll('#t th')) th.addEventListener('click', () => { const k = th.dataset.k; sortDir = sortKey === k ? -sortDir : 1; sortKey = k; panelFindings(); });
+    rows();
+  }
+  function rows() {
+    const q = $('q').value.trim().toLowerCase(); const hide = $('hideInfo').checked;
+    let list = last.findings.filter(f => !(hide && f.severity === 'info') && (!q || `${f.user} ${f.permission} ${f.note} ${TYPE[f.type]} ${f.expected} ${f.actual} ${f.group || ''}`.toLowerCase().includes(q)));
+    list = [...list].sort((a, b) => { const x = sortKey === 'severity' ? RANK[a.severity] : String(a[sortKey] || '').toLowerCase(); const y = sortKey === 'severity' ? RANK[b.severity] : String(b[sortKey] || '').toLowerCase(); return (x < y ? 1 : x > y ? -1 : 0) * (sortKey === 'severity' ? sortDir : -sortDir); });
+    $('n').textContent = `${list.length} of ${last.findings.length}`;
+    document.querySelector('#t tbody').innerHTML = list.slice(0, 3000).map(f => `<tr><td><span class="pill ${f.severity}">${f.severity}</span></td><td>${esc(TYPE[f.type] || f.type)}</td><td><a href="#" data-user="${esc(f.user)}">${esc(f.user)}</a></td><td>${esc(f.permission)}${f.description ? `<div class="muted" style="font-size:12px;max-width:420px">${esc(f.description)}</div>` : ''}</td><td class="mono">${esc(f.expected)}</td><td class="mono">${esc(f.actual)}</td><td class="muted">${esc(f.note)}</td></tr>`).join('') + (list.length > 3000 ? `<tr><td colspan="7" class="muted">… ${list.length - 3000} more — download the report</td></tr>` : '');
+    for (const a of document.querySelectorAll('#t a[data-user]')) a.addEventListener('click', e => { e.preventDefault(); pickedUser = a.dataset.user; tab = 'sbs'; render(); });
+  }
+
+  function panelSbs() {
+    const D = last.detail; if (!D.length) { $('panel').innerHTML = '<p class="empty">Nothing to show.</p>'; return; }
+    if (!pickedUser || !D.some(d => d.user === pickedUser)) pickedUser = (last.actions[0] || D[0]).user;
+    const d = D.find(x => x.user === pickedUser);
+    const bad = d.settings.filter(s => s.type !== 'ok').length;
+    $('panel').innerHTML = `<div class="two"><div><input type="text" id="uq" placeholder="find" style="margin-bottom:6px"><div class="ulist" id="ul"></div></div>
+      <div><p style="margin:0 0 8px"><b style="font-size:16px">${esc(d.user)}</b> ${d.role ? `<span class="muted">${esc(d.role)}</span>` : ''} <span class="muted">· ${d.inBaseline && d.inEcw ? 'in both' : d.inBaseline ? 'in the matrix only' : 'in eCW only'} · ${d.settings.length} settings, ${bad === 0 ? 'all match' : `${bad} differ`}</span></p>
+      <div class="toolbar"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="onlyDiff" ${bad ? 'checked' : ''}> only differences</label></div>
+      <div class="tablewrap" id="sbsT"></div></div></div>`;
+    const list = () => { const q = $('uq').value.trim().toLowerCase(); $('ul').innerHTML = D.filter(x => !q || x.user.toLowerCase().includes(q)).map(x => { const n = x.settings.filter(s => s.type !== 'ok').length; const worst = x.settings.reduce((w, s) => RANK[s.severity] > RANK[w] ? s.severity : w, 'info'); return `<div class="${x.user === pickedUser ? 'on' : ''}" data-u="${esc(x.user)}"><span>${esc(x.user)}</span>${n ? `<span class="pill ${worst !== 'info' ? worst : 'info'}">${n}</span>` : '<span class="pill ok">✓</span>'}</div>`; }).join(''); for (const el of $('ul').querySelectorAll('[data-u]')) el.addEventListener('click', () => { pickedUser = el.dataset.u; panelSbs(); }); };
+    const table = () => { const only = $('onlyDiff').checked; const S = d.settings.filter(s => !only || s.type !== 'ok'); $('sbsT').innerHTML = `<table><thead><tr><th>Setting</th><th>Matrix says</th><th>eCW says</th><th>Result</th></tr></thead><tbody>${S.map(s => `<tr><td>${esc(s.permission)}${s.description ? `<div class="muted" style="font-size:12px;max-width:460px">${esc(s.description)}</div>` : ''}</td><td><span class="cell ${s.expected ? '' : 'permission-not-in-baseline'}">${esc(s.expected || '—')}</span></td><td><span class="cell ${s.actual ? '' : 'permission-not-in-ecw'}">${esc(s.actual || '—')}</span></td><td><span class="cell ${s.type}">${esc(TYPE[s.type] || s.type)}</span></td></tr>`).join('') || '<tr><td colspan="4" class="empty">no differences</td></tr>'}</tbody></table>`; };
+    $('uq').addEventListener('input', list); $('onlyDiff').addEventListener('change', table); list(); table();
+  }
+
+  function panelCoverage() {
+    const c = last.catalog; const P = $('panel');
+    let h = `<p class="muted" style="margin:0 0 10px">Every setting eCW knows: whether the matrix covers it, and how many ${subjectWord()}s hold it in eCW. Uncovered settings that someone holds need a decision.</p>`;
+    if (c.unknown.length) h += `<div class="notes"><b>Matrix setting names eCW does not know</b> (a typo, or renamed in this eCW version):<ul>${c.unknown.map(u => `<li>${esc(u.name)}${u.suggestion ? ` → closest: <b>${esc(u.suggestion)}</b> <span class="muted">(${esc(u.group)})</span>` : ''}</li>`).join('')}</ul></div>`;
+    h += `<div class="toolbar" style="margin-top:10px"><input type="text" id="cq" placeholder="filter"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="cUncovered" checked> only uncovered</label><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="cGranted"> only held by someone</label><span class="sp"></span><span class="muted" id="cn"></span></div>
+      <div class="tablewrap" style="max-height:60vh"><table><thead><tr><th>Group</th><th>Setting</th><th>What it controls</th><th>In matrix</th><th>Held in eCW by</th></tr></thead><tbody id="cbody"></tbody></table></div>`;
+    P.innerHTML = h;
+    const rows = () => { const q = $('cq').value.trim().toLowerCase(), unc = $('cUncovered').checked, gr = $('cGranted').checked; const L = c.settings.filter(s => (!unc || !s.inBaseline) && (!gr || s.grantedTo > 0) && (!q || `${s.name} ${s.group} ${s.description}`.toLowerCase().includes(q))).sort((a, b) => (b.grantedTo - a.grantedTo) || a.group.localeCompare(b.group) || a.name.localeCompare(b.name)); $('cn').textContent = `${L.length} of ${c.settings.length}`; $('cbody').innerHTML = L.slice(0, 2000).map(s => `<tr><td>${esc(s.group)}</td><td>${esc(s.name)}</td><td class="muted" style="max-width:420px">${esc(s.description)}</td><td>${s.inBaseline ? '<span class="pill ok">yes</span>' : '<span class="pill info">no</span>'}</td><td>${s.grantedTo ? `<span class="pill ${s.inBaseline ? 'info' : 'medium'}">${s.grantedTo}</span>` : ''}</td></tr>`).join(''); };
+    $('cq').addEventListener('input', rows); $('cUncovered').addEventListener('change', rows); $('cGranted').addEventListener('change', rows); rows();
+  }
+
+  function panelMore() {
+    const j = last;
+    $('panel').innerHTML = `
+      <details open><summary>Where the differences concentrate, by setting (${j.bySetting.length})</summary>${j.bySetting.length ? `<div class="tablewrap" style="margin-top:8px;max-height:40vh"><table><thead><tr><th>Setting</th><th>Has but shouldn't</th><th>Should have but doesn't</th><th>Different</th><th>Other</th><th>Match</th></tr></thead><tbody>${j.bySetting.map(s => `<tr><td>${esc(s.setting)}</td><td>${s.excess ? `<span class="pill high">${s.excess}</span>` : ''}</td><td>${s.missing ? `<span class="pill medium">${s.missing}</span>` : ''}</td><td>${s.different ? `<span class="pill medium">${s.different}</span>` : ''}</td><td>${s.other ? `<span class="pill low">${s.other}</span>` : ''}</td><td class="muted">${s.ok}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">None.</p>'}</details>
+      <details><summary>Names that were paired although not identical (${j.matches.length})</summary>${j.matches.length ? `<p class="muted" style="font-size:13px">Check these are right; if one is wrong, add an alias or rename the matrix row.</p><div class="tablewrap" style="max-height:40vh"><table><thead><tr><th>Kind</th><th>Matrix name</th><th>eCW name</th><th>Paired by</th></tr></thead><tbody>${j.matches.map(m => `<tr><td>${m.kind === 'user' ? 'Role/user' : 'Setting'}</td><td>${esc(m.baseline)}</td><td>${esc(m.ecw)}</td><td class="muted">${m.by === 'alias' ? 'your alias' : 'same name, different wording'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">Every name matched exactly (ignoring case and punctuation).</p>'}</details>
+      <details><summary>Unmatched names with a close candidate (${j.findings.filter(f => f.suggestion).length})</summary>${j.findings.some(f => f.suggestion) ? `<p class="muted" style="font-size:13px">Not paired automatically, because a wrong guess would hide a real difference. If a pair is right, put it in an aliases file.</p><div class="tablewrap" style="max-height:40vh"><table><thead><tr><th>What</th><th>Name</th><th>Closest on the other side</th></tr></thead><tbody>${j.findings.filter(f => f.suggestion).map(f => `<tr><td>${esc(TYPE[f.type])}</td><td>${esc(f.permission || f.user)}</td><td>${esc(f.suggestion)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">None.</p>'}</details>
+      <details><summary>How the files were read</summary><div class="kv" style="margin-top:8px"><div>Matrix</div><div>“${esc(j.baseline.name)}”: ${esc(j.baseline.readAs)}, ${j.baseline.records} records</div><div>eCW</div><div>${j.actual.files ? j.actual.files.map(f => `“${esc(f.name)}” → <b>${esc(f.role || '?')}</b> (${f.records} records)`).join('<br>') : `“${esc(j.actual.name)}”: ${esc(j.actual.readAs)}, ${j.actual.records} records`}</div>${j.catalogFile ? `<div>Catalog</div><div>“${esc(j.catalogFile.name)}”: ${j.catalogFile.settings} settings in ${j.catalogFile.groups} groups</div>` : ''}</div>${notesBlock('Notes', [...(j.baseline.warnings || []).map(x => 'Matrix: ' + x), ...(j.actual.warnings || []).map(x => 'eCW: ' + x)])}</details>`;
+  }
 
   // ── open on a worked example when the build embedded sample files ──
   (async () => {
@@ -1871,73 +1987,12 @@ window.ECW = M;
     const put = (key, name, drop) => { files[key] = { name, data: S[name] }; drop.classList.add('has'); drop.querySelector('span').innerHTML = `<b>${esc(name)}</b> <span class="muted">· sample</span>`; };
     put('baseline', 'baseline.xlsx', $('dropB')); put('catalog', 'catalog.xlsx', $('dropC'));
     actuals = [{ name: 'ecw-export.xlsx', data: S['ecw-export.xlsx'], role: '', size: Math.round(S['ecw-export.xlsx'].length * 0.75) }];
-    $('dropA').classList.add('has'); $('dropA').querySelector('span').innerHTML = '<b>ecw-export.xlsx</b> <span class="muted">· sample (a per-user list)</span>';
+    $('dropA').classList.add('has'); $('dropA').querySelector('span').innerHTML = '<b>1 file</b> <span class="muted">· sample · drop more to add</span>';
     $('sampleNote').hidden = false; canRun(); $('tpl').disabled = false;
-    $('clearSamples').addEventListener('click', () => { files.baseline = files.catalog = files.actual = null; actuals = []; for (const p of ['b', 'a', 'c']) markDrop(p, null); $('peekB').innerHTML = $('peekA').innerHTML = $('peekC').innerHTML = $('roleFiles').innerHTML = ''; $('out').innerHTML = ''; $('sampleNote').hidden = true; canRun(); for (const id of ['dlX', 'dlC', 'dlJ']) $(id).disabled = true; $('tpl').disabled = true; });
+    $('clearSamples').addEventListener('click', () => { files.baseline = files.catalog = files.actual = null; actuals = []; for (const p of ['b', 'a', 'c']) markDrop(p, null); $('statusB').innerHTML = $('statusC').innerHTML = $('peekB').innerHTML = $('peekA').innerHTML = $('peekC').innerHTML = $('roleFiles').innerHTML = ''; $('out').innerHTML = ''; $('sampleNote').hidden = true; canRun(); for (const id of ['dlX', 'dlC', 'dlJ']) $(id).disabled = true; $('tpl').disabled = true; });
     await peek('b'); await peek('c'); await peekActuals();
     autoRun = true; $('run').click();
   })();
-
-  function panelActions() {
-    const P = $('panel');
-    if (!last.actions.length) { P.innerHTML = '<p class="muted">Nothing to do — every user matches the baseline.</p>'; return; }
-    P.innerHTML = `<p class="muted" style="margin:0 0 8px">Per user, in eCW: <span class="do remove">REMOVE</span> access the baseline does not allow, <span class="do grant">GRANT</span> access it requires, <span class="do review">REVIEW</span> what needs a decision. Click a user to see every setting side by side.</p>` +
-      last.actions.map(a => `<div class="ucard"><h4><a href="#" data-user="${esc(a.user)}">${esc(a.user)}</a>${roleOf(a.user) ? `<span class="chip role">${esc(roleOf(a.user))}</span>` : ''}${a.status ? `<span class="muted" style="font-weight:400">— ${esc(a.status)}</span>` : ''}</h4>
-        ${a.remove.length ? `<ul>${a.remove.map(p => `<li><span class="do remove">REMOVE</span>${esc(p)}</li>`).join('')}</ul>` : ''}
-        ${a.grant.length ? `<ul>${a.grant.map(p => `<li><span class="do grant">GRANT</span>${esc(p)}</li>`).join('')}</ul>` : ''}
-        ${a.review.length ? `<ul>${a.review.map(p => `<li><span class="do review">REVIEW</span>${esc(p)}</li>`).join('')}</ul>` : ''}</div>`).join('');
-    for (const a of P.querySelectorAll('a[data-user]')) a.addEventListener('click', e => { e.preventDefault(); pickedUser = a.dataset.user; tab = 'sbs'; render(); });
-  }
-
-  function panelFindings() {
-    $('panel').innerHTML = `<div class="filters"><input type="text" id="q" placeholder="filter by user, setting or note"><label><input type="checkbox" id="hideInfo" checked> hide info</label><span class="muted" id="n"></span></div>
-      <div class="tablewrap"><table id="t"><thead><tr>${['severity', 'type', 'user', 'permission', ...(last.catalog ? ['group', 'description'] : []), 'expected', 'actual', 'note'].map(k => `<th class="sortable" data-k="${k}">${{ permission: 'Security setting', expected: 'Expected (baseline)', actual: 'Actual (eCW)', description: 'What it controls' }[k] || k[0].toUpperCase() + k.slice(1)}${sortKey === k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody></tbody></table></div>`;
-    $('q').addEventListener('input', rows); $('hideInfo').addEventListener('change', rows);
-    for (const th of document.querySelectorAll('#t th')) th.addEventListener('click', () => { const k = th.dataset.k; sortDir = sortKey === k ? -sortDir : 1; sortKey = k; panelFindings(); });
-    rows();
-  }
-  function rows() {
-    const q = $('q').value.trim().toLowerCase(); const hide = $('hideInfo').checked;
-    let list = last.findings.filter(f => !(hide && f.severity === 'info') && (!q || `${f.user} ${f.permission} ${f.note} ${f.type} ${f.expected} ${f.actual}`.toLowerCase().includes(q)));
-    list = [...list].sort((a, b) => { const x = sortKey === 'severity' ? RANK[a.severity] : String(a[sortKey] || '').toLowerCase(); const y = sortKey === 'severity' ? RANK[b.severity] : String(b[sortKey] || '').toLowerCase(); return (x < y ? 1 : x > y ? -1 : 0) * (sortKey === 'severity' ? sortDir : -sortDir); });
-    $('n').textContent = `${list.length} of ${last.findings.length} findings`;
-    document.querySelector('#t tbody').innerHTML = list.slice(0, 3000).map(f => `<tr><td><span class="tag ${f.severity}">${f.severity}</span></td><td>${esc(TYPE[f.type] || f.type)}</td><td><a href="#" data-user="${esc(f.user)}">${esc(f.user)}</a></td><td>${esc(f.permission)}</td>${last.catalog ? `<td class="muted">${esc(f.group || '')}</td><td class="muted" style="max-width:320px">${esc(f.description || '')}</td>` : ''}<td class="mono">${esc(f.expected)}</td><td class="mono">${esc(f.actual)}</td><td class="muted">${esc(f.note)}</td></tr>`).join('') + (list.length > 3000 ? `<tr><td colspan="9" class="muted">… ${list.length - 3000} more — download the report</td></tr>` : '');
-    for (const a of document.querySelectorAll('#t a[data-user]')) a.addEventListener('click', e => { e.preventDefault(); pickedUser = a.dataset.user; tab = 'sbs'; render(); });
-  }
-
-  function panelSbs() {
-    const D = last.detail; if (!D.length) { $('panel').innerHTML = '<p class="muted">No users.</p>'; return; }
-    if (!pickedUser || !D.some(d => d.user === pickedUser)) pickedUser = (last.actions[0] || D[0]).user;
-    const d = D.find(x => x.user === pickedUser);
-    const bad = d.settings.filter(s => s.type !== 'ok').length;
-    $('panel').innerHTML = `<div class="two"><div><input type="text" id="uq" placeholder="find a user" style="margin-bottom:6px"><div class="ulist" id="ul"></div></div>
-      <div><h3 style="margin:0 0 4px">${esc(d.user)} ${d.role ? `<span class="chip role">${esc(d.role)}</span>` : ''} <span class="muted" style="font-weight:400;font-size:13px">· ${d.inBaseline && d.inEcw ? 'in both documents' : d.inBaseline ? 'baseline only — not in eCW' : 'eCW only — not in the baseline'} · ${d.settings.length} settings, ${bad} differ</span></h3>
-      <div class="filters" style="margin:6px 0"><label><input type="checkbox" id="onlyDiff" ${bad ? 'checked' : ''}> only differences</label></div>
-      <div class="tablewrap" id="sbsT"></div></div></div>`;
-    const list = () => { const q = $('uq').value.trim().toLowerCase(); $('ul').innerHTML = D.filter(x => !q || x.user.toLowerCase().includes(q)).map(x => { const n = x.settings.filter(s => s.type !== 'ok').length; const worst = x.settings.reduce((w, s) => RANK[s.severity] > RANK[w] ? s.severity : w, 'info'); return `<div class="${x.user === pickedUser ? 'on' : ''}" data-u="${esc(x.user)}"><span>${esc(x.user)}</span><small>${n ? `<span class="tag ${n && worst !== 'info' ? worst : 'info'}">${n}</span>` : '<span class="tag ok">✓</span>'}</small></div>`; }).join(''); for (const el of $('ul').querySelectorAll('[data-u]')) el.addEventListener('click', () => { pickedUser = el.dataset.u; panelSbs(); }); };
-    const table = () => { const only = $('onlyDiff').checked; const S = d.settings.filter(s => !only || s.type !== 'ok'); $('sbsT').innerHTML = `<table><thead><tr><th>Security setting</th><th>Baseline says</th><th>eCW says</th><th>Result</th></tr></thead><tbody>${S.map(s => `<tr><td>${esc(s.permission)}${s.description ? `<div class="muted" style="font-size:12px;max-width:520px">${esc(s.description)}</div>` : ''}</td><td><span class="cell ${s.expected ? '' : 'permission-not-in-baseline'}">${esc(s.expected || '—')}</span></td><td><span class="cell ${s.actual ? '' : 'permission-not-in-ecw'}">${esc(s.actual || '—')}</span></td><td><span class="cell ${s.type}">${esc(TYPE[s.type] || s.type)}</span></td></tr>`).join('') || '<tr><td colspan="4" class="muted">no differences</td></tr>'}</tbody></table>`; };
-    $('uq').addEventListener('input', list); $('onlyDiff').addEventListener('change', table); list(); table();
-  }
-
-  function panelSettings() {
-    $('panel').innerHTML = last.bySetting.length ? `<div class="tablewrap"><table><thead><tr><th>Security setting</th><th>Excess</th><th>Missing</th><th>Different</th><th>Other</th><th>OK</th></tr></thead><tbody>${last.bySetting.map(s => `<tr><td>${esc(s.setting)}</td><td>${s.excess ? `<span class="tag high">${s.excess}</span>` : ''}</td><td>${s.missing ? `<span class="tag medium">${s.missing}</span>` : ''}</td><td>${s.different ? `<span class="tag medium">${s.different}</span>` : ''}</td><td>${s.other ? `<span class="tag low">${s.other}</span>` : ''}</td><td class="muted">${s.ok}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">No setting has a discrepancy.</p>';
-  }
-  function panelCoverage() {
-    const c = last.catalog; const P = $('panel');
-    let h = `<p class="muted" style="margin:0 0 8px">Every setting eCW knows, by group: which ones the baseline covers and how many eCW users hold each. An uncovered setting that someone holds is a decision waiting to be made — add it to the baseline as Y or N.</p>`;
-    if (c.unknown.length) h += `<div class="warn"><b>Baseline settings eCW does not know</b> (typo or renamed — fix the baseline, or add an alias):<ul>${c.unknown.map(u => `<li>${esc(u.name)}${u.suggestion ? ` → closest: <b>${esc(u.suggestion)}</b> <span class="muted">(${esc(u.group)})</span>` : ''}</li>`).join('')}</ul></div>`;
-    if (c.ecwUnknown.length) h += `<div class="warn"><b>eCW export settings not in the catalog</b> (a newer or older eCW version?): ${c.ecwUnknown.slice(0, 20).map(esc).join('; ')}${c.ecwUnknown.length > 20 ? ' …' : ''}</div>`;
-    h += `<div class="filters"><input type="text" id="cq" placeholder="filter by setting, group or description"><label><input type="checkbox" id="cUncovered" checked> only uncovered</label><label><input type="checkbox" id="cGranted"> only granted to someone</label><span class="muted" id="cn"></span></div>
-      <div class="tablewrap" style="max-height:60vh"><table><thead><tr><th>Group</th><th>Security setting</th><th>What it controls</th><th>In baseline</th><th>Granted in eCW to</th></tr></thead><tbody id="cbody"></tbody></table></div>
-      <h3 style="font-size:14px;margin:14px 0 6px">By group</h3><div class="tablewrap" style="max-height:40vh"><table><thead><tr><th>Group</th><th>Settings</th><th>Covered by baseline</th><th>Uncovered but granted</th></tr></thead><tbody>${c.byGroup.map(g => `<tr><td>${esc(g.group)}</td><td>${g.total}</td><td>${g.covered}</td><td>${g.grantedUncovered ? `<span class="tag medium">${g.grantedUncovered}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
-    P.innerHTML = h;
-    const rows = () => { const q = $('cq').value.trim().toLowerCase(), unc = $('cUncovered').checked, gr = $('cGranted').checked; const L = c.settings.filter(s => (!unc || !s.inBaseline) && (!gr || s.grantedTo > 0) && (!q || `${s.name} ${s.group} ${s.description}`.toLowerCase().includes(q))).sort((a, b) => (b.grantedTo - a.grantedTo) || a.group.localeCompare(b.group) || a.name.localeCompare(b.name)); $('cn').textContent = `${L.length} of ${c.settings.length} settings`; $('cbody').innerHTML = L.slice(0, 2000).map(s => `<tr><td>${esc(s.group)}</td><td>${esc(s.name)}</td><td class="muted" style="max-width:420px">${esc(s.description)}</td><td>${s.inBaseline ? '<span class="tag ok">Y</span>' : '<span class="tag info">N</span>'}</td><td>${s.grantedTo ? `<span class="tag ${s.inBaseline ? 'info' : 'medium'}">${s.grantedTo}</span>` : ''}</td></tr>`).join(''); };
-    $('cq').addEventListener('input', rows); $('cUncovered').addEventListener('change', rows); $('cGranted').addEventListener('change', rows); rows();
-  }
-  function panelMatches() {
-    $('panel').innerHTML = (last.matches.length ? `<p class="muted" style="margin:0 0 8px">Names that were not identical in the two documents but were paired anyway. Check they are right; if one is wrong, add an alias or rename the baseline row.</p><div class="tablewrap"><table><thead><tr><th>Kind</th><th>Baseline name</th><th>eCW name</th><th>Paired by</th></tr></thead><tbody>${last.matches.map(m => `<tr><td>${m.kind === 'user' ? 'User' : 'Setting'}</td><td>${esc(m.baseline)}</td><td>${esc(m.ecw)}</td><td class="muted">${m.by === 'alias' ? 'alias you supplied' : 'same name, different category'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Every user and setting matched by exact name (ignoring case and punctuation).</p>') +
-      (last.findings.some(f => f.suggestion) ? `<h3 style="font-size:14px;margin:14px 0 6px">Unmatched names with a close candidate</h3><p class="muted" style="margin:0 0 8px">Not paired automatically — a wrong guess would hide a real discrepancy. If a pair is right, put it in an aliases file (baseline name, eCW name) and validate again.</p><div class="tablewrap"><table><thead><tr><th>Type</th><th>User</th><th>Name</th><th>Closest on the other side</th></tr></thead><tbody>${last.findings.filter(f => f.suggestion).map(f => `<tr><td>${esc(TYPE[f.type])}</td><td>${esc(f.user)}</td><td>${esc(f.permission || f.user)}</td><td>${esc(f.suggestion)}</td></tr>`).join('')}</tbody></table></div>` : '');
-  }
 })();
 </script>
 </body>
