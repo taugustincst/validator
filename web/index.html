@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eCW Security Settings Validator</title>
+<style>
+  :root { --bg: #f6f7f9; --card: #fff; --ink: #1c2330; --muted: #64707d; --line: #dfe3e8; --accent: #2456c7; --high: #c0392b; --high-bg: #fde8e6; --med: #a35d00; --med-bg: #fff3d6; --low: #1f5f8b; --low-bg: #e3eef8; --ok: #1e7b45; --ok-bg: #e2f3e8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); }
+  header { padding: 18px 24px; background: var(--card); border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 18px; } header p { margin: 4px 0 0; color: var(--muted); }
+  main { max-width: 1200px; margin: 0 auto; padding: 20px 24px 60px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .card h2 { margin: 0 0 6px; font-size: 15px; } .card p.hint { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+  .drop { border: 2px dashed var(--line); border-radius: 8px; padding: 22px 12px; text-align: center; color: var(--muted); cursor: pointer; transition: .15s; }
+  .drop.over, .drop:hover { border-color: var(--accent); color: var(--accent); background: #f2f6ff; } .drop.has { border-style: solid; color: var(--ink); }
+  .drop input { display: none; } .drop b { color: var(--ink); }
+  details { margin-top: 10px; } summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; } label { font-size: 12px; color: var(--muted); display: block; }
+  input[type=text], select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+  .actions { display: flex; gap: 10px; align-items: center; margin: 16px 0; flex-wrap: wrap; }
+  button { font: inherit; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); cursor: pointer; } button.primary { background: var(--accent); color: #fff; border-color: var(--accent); } button:disabled { opacity: .5; cursor: default; }
+  .verdict { font-size: 20px; font-weight: 600; padding: 12px 16px; border-radius: 8px; } .verdict.pass { background: var(--ok-bg); color: var(--ok); } .verdict.fail { background: var(--high-bg); color: var(--high); }
+  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; } .stat { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; min-width: 110px; } .stat b { display: block; font-size: 20px; } .stat span { color: var(--muted); font-size: 12px; }
+  .stat.high b { color: var(--high); } .stat.medium b { color: var(--med); } .stat.low b { color: var(--low); } .stat.ok b { color: var(--ok); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; } th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; } th { background: #f0f2f5; position: sticky; top: 0; cursor: pointer; user-select: none; white-space: nowrap; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; } .tag.high { background: var(--high-bg); color: var(--high); } .tag.medium { background: var(--med-bg); color: var(--med); } .tag.low { background: var(--low-bg); color: var(--low); } .tag.info { background: #eef0f2; color: var(--muted); }
+  .tablewrap { overflow: auto; max-height: 70vh; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+  .filters { display: flex; gap: 10px; align-items: center; margin: 12px 0; flex-wrap: wrap; } .filters input[type=text] { width: 260px; }
+  .err { background: var(--high-bg); color: var(--high); padding: 10px 14px; border-radius: 8px; white-space: pre-wrap; }
+  .muted { color: var(--muted); } .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  footer { margin-top: 30px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>eCW Security Settings Validator</h1>
+  <p>Compare what eClinicalWorks says each user can do with what your baseline spreadsheet says they should be able to do. Files stay on this machine.</p>
+</header>
+<main>
+  <div class="grid">
+    <div class="card">
+      <h2>1 · Baseline (what users should have)</h2>
+      <p class="hint">Your approved permission matrix: settings down the first column and users (or roles) across, Y/N in the cells — or one row per user and setting. A second sheet mapping user → role is picked up automatically.</p>
+      <label class="drop" id="dropB"><input type="file" id="fileB" accept=".xlsx,.xlsm,.csv,.tsv"><span>Drop the baseline here or click to choose</span></label>
+      <details><summary>Reading options</summary><div class="opts">
+        <label>Sheet name <input type="text" id="bSheet" placeholder="auto"></label>
+        <label>Layout <select id="bLayout"><option value="">auto</option><option value="matrix">matrix (grid)</option><option value="long">long (one row per user + setting)</option></select></label>
+        <label>Matrix orientation <select id="bOrient"><option value="">auto</option><option value="permissions-down">settings down, users across</option><option value="users-down">users down, settings across</option></select></label>
+        <label>Roles sheet <input type="text" id="bRoles" placeholder="auto"></label>
+      </div></details>
+    </div>
+    <div class="card">
+      <h2>2 · eCW export (what users actually have)</h2>
+      <p class="hint">In eCW: Admin → Security Settings (or Reports → User Security Settings) → Print/Export to Excel. Save as .xlsx or .csv and drop it here.</p>
+      <label class="drop" id="dropA"><input type="file" id="fileA" accept=".xlsx,.xlsm,.csv,.tsv"><span>Drop the eCW export here or click to choose</span></label>
+      <details><summary>Reading options</summary><div class="opts">
+        <label>Sheet name <input type="text" id="aSheet" placeholder="auto"></label>
+        <label>Layout <select id="aLayout"><option value="">auto</option><option value="matrix">matrix (grid)</option><option value="long">long (one row per user + setting)</option></select></label>
+        <label>Matrix orientation <select id="aOrient"><option value="">auto</option><option value="permissions-down">settings down, users across</option><option value="users-down">users down, settings across</option></select></label>
+        <label>Blank cells <select id="aBlank"><option value="no">mean "not granted"</option><option value="unknown">are ignored</option></select></label>
+      </div></details>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h2>3 · Comparison options</h2>
+    <div class="opts" style="grid-template-columns: repeat(3, 1fr)">
+      <label>Ignore users (comma-separated, * wildcard) <input type="text" id="ignoreUsers" placeholder="e.g. test*, ecwadmin"></label>
+      <label>Ignore settings <input type="text" id="ignorePerms" placeholder="e.g. Labs > *"></label>
+      <label>Only these users <input type="text" id="onlyUsers" placeholder="e.g. jsmith, *nurse*"></label>
+    </div>
+    <div class="actions" style="margin-bottom:0">
+      <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="unknownPerms" checked> report eCW settings the baseline does not cover</label>
+      <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="includeOk"> include matching pairs</label>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="primary" id="run" disabled>Validate</button>
+    <button id="dlX" disabled>Download report (.xlsx)</button>
+    <button id="dlC" disabled>Findings (.csv)</button>
+    <button id="dlJ" disabled>Result (.json)</button>
+    <span class="muted" id="status"></span>
+  </div>
+  <div id="out"></div>
+  <footer>Severity: <b>High</b> = eCW grants access the baseline does not (remove it, or approve it in the baseline). <b>Medium</b> = the baseline requires access eCW lacks, a level mismatch, or a baseline user eCW does not list. <b>Low / Info</b> = coverage gaps between the two documents.</footer>
+</main>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const files = { baseline: null, actual: null };
+  let last = null, sortKey = null, sortDir = 1;
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const readFile = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res({ name: f.name, data: String(r.result).split(',')[1] || '' }); r.onerror = () => rej(r.error); r.readAsDataURL(f); });
+  function wire(drop, input, key) {
+    const set = async f => { if (!f) return; files[key] = await readFile(f); drop.classList.add('has'); drop.querySelector('span').innerHTML = `<b>${esc(f.name)}</b> · ${(f.size / 1024).toFixed(0)} KB`; $('run').disabled = !(files.baseline && files.actual); };
+    input.addEventListener('change', () => set(input.files[0]));
+    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+    drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); set(e.dataTransfer.files[0]); });
+  }
+  wire($('dropB'), $('fileB'), 'baseline'); wire($('dropA'), $('fileA'), 'actual');
+  const body = () => ({ baseline: files.baseline, actual: files.actual, options: {
+    baseline: { sheet: $('bSheet').value, layout: $('bLayout').value, orientation: $('bOrient').value, rolesSheet: $('bRoles').value },
+    actual: { sheet: $('aSheet').value, layout: $('aLayout').value, orientation: $('aOrient').value, blankIsNo: $('aBlank').value === 'no' },
+    ignoreUsers: $('ignoreUsers').value, ignorePermissions: $('ignorePerms').value, onlyUsers: $('onlyUsers').value, reportUnknownPermissions: $('unknownPerms').checked, reportOk: $('includeOk').checked } });
+  const TYPE = { ok: 'OK', excess: 'Excess access', missing: 'Missing access', different: 'Different level', 'user-not-in-baseline': 'User not in baseline', 'user-not-in-ecw': 'User not in eCW', 'permission-not-in-baseline': 'Setting not in baseline', 'permission-not-in-ecw': 'Setting not in eCW' };
+  $('run').addEventListener('click', async () => {
+    $('status').textContent = 'validating…'; $('run').disabled = true; $('out').innerHTML = '';
+    try {
+      const r = await fetch('/api/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body()) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.statusText);
+      last = j; render(); $('status').textContent = '';
+      for (const id of ['dlX', 'dlC', 'dlJ']) $(id).disabled = false;
+    } catch (e) { $('out').innerHTML = `<div class="err">${esc(e.message)}</div>`; $('status').textContent = ''; }
+    finally { $('run').disabled = false; }
+  });
+  const download = async fmt => {
+    $('status').textContent = 'building report…';
+    const r = await fetch('/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body(), format: fmt }) });
+    if (!r.ok) { $('status').textContent = 'report failed: ' + ((await r.json()).error || r.statusText); return; }
+    const blob = await r.blob(); const name = (r.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1] || `ecw-validation.${fmt}`;
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); $('status').textContent = '';
+  };
+  $('dlX').addEventListener('click', () => download('xlsx')); $('dlC').addEventListener('click', () => download('csv')); $('dlJ').addEventListener('click', () => download('json'));
+  function render() {
+    const j = last; const c = j.bySeverity;
+    const layout = x => x.layout.layout === 'long' ? 'long' : `matrix, ${x.layout.orientation}${x.expanded ? ', roles → users' : ''}`;
+    let h = `<div class="verdict ${j.pass ? 'pass' : 'fail'}">${j.pass ? 'PASS — no high or medium findings' : 'FAIL — review the findings below'}</div>
+      <p class="muted">Baseline: sheet “${esc(j.baseline.sheet)}” (${esc(layout(j.baseline))}, ${j.baseline.records} records). eCW export: sheet “${esc(j.actual.sheet)}” (${esc(layout(j.actual))}, ${j.actual.records} records).
+      Users: ${j.users.baseline} in baseline · ${j.users.ecw} in eCW · ${j.users.both} in both. Settings: ${j.permissions.baseline} · ${j.permissions.ecw} · ${j.permissions.both}. Compared ${j.compared} pairs, ${j.counts.ok} match.</p>
+      <div class="stats"><div class="stat high"><b>${c.high}</b><span>high</span></div><div class="stat medium"><b>${c.medium}</b><span>medium</span></div><div class="stat low"><b>${c.low}</b><span>low</span></div><div class="stat"><b>${c.info}</b><span>info</span></div><div class="stat ok"><b>${j.counts.ok}</b><span>matching</span></div>
+      <div class="stat high"><b>${j.counts.excess}</b><span>excess access</span></div><div class="stat medium"><b>${j.counts.missing}</b><span>missing access</span></div><div class="stat medium"><b>${j.counts['user-not-in-ecw']}</b><span>users not in eCW</span></div><div class="stat high"><b>${j.counts['user-not-in-baseline']}</b><span>users not in baseline</span></div></div>
+      <div class="filters"><input type="text" id="q" placeholder="filter by user, setting or note"><label><input type="checkbox" id="hideInfo" checked> hide info</label><span class="muted" id="n"></span></div>
+      <div class="tablewrap"><table id="t"><thead><tr>${['severity', 'type', 'user', 'permission', 'expected', 'actual', 'note'].map(k => `<th data-k="${k}">${k === 'permission' ? 'Security setting' : k === 'expected' ? 'Expected (baseline)' : k === 'actual' ? 'Actual (eCW)' : k[0].toUpperCase() + k.slice(1)}</th>`).join('')}</tr></thead><tbody></tbody></table></div>`;
+    $('out').innerHTML = h;
+    $('q').addEventListener('input', rows); $('hideInfo').addEventListener('change', rows);
+    for (const th of document.querySelectorAll('#t th')) th.addEventListener('click', () => { const k = th.dataset.k; sortDir = sortKey === k ? -sortDir : 1; sortKey = k; rows(); });
+    rows();
+  }
+  const RANK = { high: 3, medium: 2, low: 1, info: 0 };
+  function rows() {
+    const q = $('q').value.trim().toLowerCase(); const hide = $('hideInfo').checked;
+    let list = last.findings.filter(f => !(hide && f.severity === 'info') && (!q || `${f.user} ${f.permission} ${f.note} ${f.type} ${f.expected} ${f.actual}`.toLowerCase().includes(q)));
+    if (sortKey) list = [...list].sort((a, b) => { const x = sortKey === 'severity' ? RANK[a.severity] : String(a[sortKey] || '').toLowerCase(); const y = sortKey === 'severity' ? RANK[b.severity] : String(b[sortKey] || '').toLowerCase(); return (x < y ? -1 : x > y ? 1 : 0) * sortDir; });
+    $('n').textContent = `${list.length} of ${last.findings.length} findings`;
+    document.querySelector('#t tbody').innerHTML = list.slice(0, 2000).map(f => `<tr><td><span class="tag ${f.severity}">${f.severity}</span></td><td>${esc(TYPE[f.type] || f.type)}</td><td>${esc(f.user)}</td><td>${esc(f.permission)}</td><td class="mono">${esc(f.expected)}</td><td class="mono">${esc(f.actual)}</td><td class="muted">${esc(f.note)}</td></tr>`).join('') + (list.length > 2000 ? `<tr><td colspan="7" class="muted">… ${list.length - 2000} more — download the report</td></tr>` : '');
+  }
+})();
+</script>
+</body>
+</html>

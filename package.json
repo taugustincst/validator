@@ -1,0 +1,20 @@
+{
+  "name": "ecw-security-validator",
+  "version": "1.0.0",
+  "description": "Validates eClinicalWorks (eCW) security settings / user permissions against a baseline Excel spreadsheet and reports every discrepancy.",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "ecw-validate": "bin/ecw-validate.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node bin/ecw-validate.js serve",
+    "test": "node --test test/*.test.js",
+    "examples": "node examples/make-examples.js",
+    "demo": "node bin/ecw-validate.js validate --baseline examples/baseline.xlsx --actual examples/ecw-export.xlsx --out examples/report.xlsx"
+  },
+  "license": "MIT"
+}
