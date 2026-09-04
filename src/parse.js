@@ -112,49 +112,68 @@ const joinName = (cat, name) => { cat = clean(cat); name = clean(name); return c
 /**
  * Extract records from one sheet. opts as in detectLayout, plus blankIsNo (matrix cells left empty
  * mean "not granted"; default true) and name (the sheet name for provenance).
+ * Returns { layout, records, warnings, skipped } — warnings are plain sentences about what was
+ * ignored or looked odd, so a person can see whether the file was read the way they expected.
  */
 export function extractRecords(rows, opts = {}) {
   const lay = detectLayout(rows, opts);
-  const out = [];
+  const out = [], warnings = [];
   const blankIsNo = opts.blankIsNo ?? true;
+  const sheet = opts.name || '';
+  const where = sheet ? `sheet "${sheet}"` : 'the sheet';
+  let skipped = 0, unknownValues = new Map();
+  const note = (raw, v) => { if (v !== 'Y' && v !== 'N') unknownValues.set(v, (unknownValues.get(v) || 0) + 1); };
   if (lay.layout === 'long') {
-    let lastSubject = '', lastCat = '';
+    let lastSubject = '', lastCat = '', noUser = 0;
     for (let i = lay.headerRow + 1; i < rows.length; i++) {
       const r = rows[i] || [];
+      if (!r.some(c => clean(c) !== '')) continue;
       const subj = clean(r[lay.subjectCol]) || lastSubject;   // eCW reports print the user once, then a block of settings
       const cat = lay.categoryCol >= 0 ? (clean(r[lay.categoryCol]) || lastCat) : '';
       const perm = clean(r[lay.permissionCol]);
       if (clean(r[lay.subjectCol])) lastSubject = subj;
       if (lay.categoryCol >= 0 && clean(r[lay.categoryCol])) lastCat = cat;
-      if (!subj || !perm) continue;
+      if (!subj || !perm) { skipped++; if (!subj) noUser++; continue; }
       const raw = r[lay.valueCol];
-      out.push({ subject: subj, permission: joinName(cat, perm), value: normalizeValue(raw), raw: raw === undefined ? '' : raw, sheet: opts.name || '', row: i + 1 });
+      const value = normalizeValue(raw); note(raw, value);
+      out.push({ subject: subj, permission: joinName(cat, perm), value, raw: raw === undefined ? '' : raw, sheet, row: i + 1 });
     }
-    return { layout: lay, records: out };
-  }
-  const headers = (rows[lay.headerRow] || []).map(clean);
-  const cols = [];
-  for (let c = lay.firstDataCol; c < headers.length; c++) if (headers[c] !== '') cols.push(c);
-  let lastCat = '';
-  for (let i = lay.headerRow + 1; i < rows.length; i++) {
-    const r = rows[i] || [];
-    const label = clean(r[lay.permissionCol]);
-    const cat = lay.categoryCol >= 0 ? (clean(r[lay.categoryCol]) || lastCat) : '';
-    if (lay.categoryCol >= 0 && clean(r[lay.categoryCol])) lastCat = cat;
-    // A row with a label but no values at all is a section heading in a permissions-down grid.
-    const anyValue = cols.some(c => clean(r[c]) !== '');
-    if (!label) continue;
-    if (!anyValue && lay.orientation === 'permissions-down' && lay.categoryCol < 0) { lastCat = label; continue; }
-    for (const c of cols) {
-      const raw = r[c] === undefined ? '' : r[c];
-      if (clean(raw) === '' && !blankIsNo) continue;
-      const rec = lay.orientation === 'permissions-down'
-        ? { subject: headers[c], permission: joinName(lay.categoryCol >= 0 ? cat : lastCat, label) }
-        : { subject: label, permission: headers[c] };
-      out.push({ ...rec, value: normalizeValue(raw), raw, sheet: opts.name || '', row: i + 1 });
+    if (noUser) warnings.push(`${where}: ${noUser} row(s) had a setting but no user above them and were skipped`);
+  } else {
+    const headers = (rows[lay.headerRow] || []).map(clean);
+    const cols = [];
+    for (let c = lay.firstDataCol; c < headers.length; c++) if (headers[c] !== '') cols.push(c);
+    const unnamed = headers.slice(lay.firstDataCol).filter((h, i) => h === '' && rows.slice(lay.headerRow + 1).some(r => clean(r[lay.firstDataCol + i]) !== '')).length;
+    if (unnamed) warnings.push(`${where}: ${unnamed} column(s) have values but no name in the header row and were ignored`);
+    let lastCat = '', headings = 0;
+    for (let i = lay.headerRow + 1; i < rows.length; i++) {
+      const r = rows[i] || [];
+      const label = clean(r[lay.permissionCol]);
+      const cat = lay.categoryCol >= 0 ? (clean(r[lay.categoryCol]) || lastCat) : '';
+      if (lay.categoryCol >= 0 && clean(r[lay.categoryCol])) lastCat = cat;
+      const anyValue = cols.some(c => clean(r[c]) !== '');
+      if (!label) { if (anyValue) skipped++; continue; }
+      // A row with a label but no values at all is a section heading in a permissions-down grid.
+      if (!anyValue && lay.orientation === 'permissions-down' && lay.categoryCol < 0) { lastCat = label; headings++; continue; }
+      for (const c of cols) {
+        const raw = r[c] === undefined ? '' : r[c];
+        if (clean(raw) === '' && !blankIsNo) continue;
+        const rec = lay.orientation === 'permissions-down'
+          ? { subject: headers[c], permission: joinName(lay.categoryCol >= 0 ? cat : lastCat, label) }
+          : { subject: label, permission: headers[c] };
+        const value = normalizeValue(raw); note(raw, value);
+        out.push({ ...rec, value, raw, sheet, row: i + 1 });
+      }
     }
+    if (headings) warnings.push(`${where}: ${headings} row(s) with a name but no values were read as section headings (${[...new Set(out.map(r => r.permission.split(' > ')[0]))].slice(0, 6).join(', ')}…)`);
+    if (skipped) warnings.push(`${where}: ${skipped} row(s) had values but no name in the first column and were skipped`);
   }
-  return { layout: lay, records: out };
+  // Duplicates: the same user + setting twice. The LAST one wins in the comparison; say so.
+  const seen = new Map(); let dups = 0;
+  for (const r of out) { const k = normKey(r.subject) + '|' + normKey(r.permission); if (seen.has(k)) { dups++; if (seen.get(k) !== r.value) r.duplicateOf = seen.get(k); } seen.set(k, r.value); }
+  if (dups) warnings.push(`${where}: ${dups} user/setting pair(s) appear more than once — the last occurrence is used`);
+  if (unknownValues.size) warnings.push(`${where}: values other than yes/no were kept as levels and compared as text: ${[...unknownValues].map(([v, n]) => `"${v}"×${n}`).slice(0, 8).join(', ')}`);
+  return { layout: lay, records: out, warnings, skipped };
 }
 
 const ROLE_HEADERS = ['role', 'role name', 'security role', 'group', 'job title', 'title', 'template', 'profile'];
@@ -176,28 +195,42 @@ export function extractRoleMap(rows) {
 const looksLikeRoleMap = name => /^(user|users|role map|roles map|mapping|user roles|users roles|staff|assignments?)$/i.test(clean(name));
 
 /**
- * Read a whole workbook into records. Picks the sheet named by opts.sheet, otherwise the first
- * sheet that yields records (skipping an obvious user→role mapping sheet). A baseline workbook may
- * also carry a mapping sheet (opts.rolesSheet, or auto-detected); when it does and the permission
- * sheet is keyed by role, each role's settings are expanded to its users.
+ * Read a whole workbook into records. Picks the sheet named by opts.sheet ('all' or '*' merges every
+ * sheet that parses — eCW can export one tab per user), otherwise the first sheet that yields records
+ * (skipping an obvious user→role mapping sheet). A baseline workbook may also carry a mapping sheet
+ * (opts.rolesSheet, or auto-detected); when it does and the permission sheet is keyed by role, each
+ * role's settings are expanded to its users.
+ * Returns { sheet, sheets, layout, records, roleMap, expanded, warnings, ignoredSheets }.
  */
 export function workbookToRecords(wb, opts = {}) {
   const sheets = wb.sheets || [];
   if (!sheets.length) throw new Error('the workbook has no sheets');
+  const warnings = [];
   const pick = name => { const s = sheets.find(x => normKey(x.name) === normKey(name)); if (!s) throw new Error(`sheet "${name}" not found; sheets are: ${sheets.map(x => x.name).join(', ')}`); return s; };
   let roleMap = null, roleSheet = null;
   if (opts.rolesSheet) { roleSheet = pick(opts.rolesSheet); roleMap = extractRoleMap(roleSheet.rows); if (!roleMap) throw new Error(`sheet "${opts.rolesSheet}" is not a user → role mapping (needs a user column and a role column)`); }
   else if (opts.expandRoles !== false) for (const s of sheets) { if (sheets.length > 1 && looksLikeRoleMap(s.name)) { const m = extractRoleMap(s.rows); if (m) { roleMap = m; roleSheet = s; break; } } }
-  let main, res;
-  if (opts.sheet) { main = pick(opts.sheet); res = extractRecords(main.rows, { ...opts, name: main.name }); }
+  const used = [], ignored = [];
+  let res = null, layout = null;
+  const all = opts.sheet && /^(all|\*)$/i.test(String(opts.sheet));
+  if (opts.sheet && !all) { const main = pick(opts.sheet); res = extractRecords(main.rows, { ...opts, name: main.name }); used.push(main.name); layout = res.layout; }
   else {
-    let lastErr = null;
+    let lastErr = null; const records = [];
     for (const s of sheets) {
       if (s === roleSheet) continue;
-      try { const r = extractRecords(s.rows, { ...opts, name: s.name }); if (r.records.length) { main = s; res = r; break; } } catch (e) { lastErr = e; }
+      try {
+        const r = extractRecords(s.rows, { ...opts, name: s.name });
+        if (!r.records.length) { ignored.push(s.name); continue; }
+        used.push(s.name); records.push(...r.records); warnings.push(...r.warnings); layout ??= r.layout;
+        if (!all) break;
+      } catch (e) { lastErr = e; ignored.push(s.name); }
     }
-    if (!res) throw lastErr || new Error('no sheet with permission data found');
+    if (!used.length) throw lastErr || new Error('no sheet with permission data found');
+    res = { records, layout, warnings: [] };
+    if (!all && ignored.length && sheets.length > 1) warnings.push(`sheet "${used[0]}" was used; ${ignored.map(n => `"${n}"`).join(', ')} had no permission data (use --sheet to pick another, or --sheet all to merge every sheet)`);
+    if (!all && used.length === 1 && sheets.filter(x => x !== roleSheet && x !== sheets.find(y => y.name === used[0])).some(x => { try { return extractRecords(x.rows, { ...opts, name: x.name }).records.length > 0; } catch { return false; } })) warnings.push(`other sheets also contain permission data and were NOT read: ${sheets.filter(x => x !== roleSheet && x.name !== used[0]).map(x => `"${x.name}"`).join(', ')} — pass --sheet all to merge them`);
   }
+  warnings.push(...(res.warnings || []));
   let records = res.records, expanded = false;
   if (roleMap) {
     const subjects = new Set(records.map(r => normKey(r.subject)));
@@ -207,9 +240,14 @@ export function workbookToRecords(wb, opts = {}) {
       const out = [];
       const perRole = new Map();
       for (const r of records) { const k = normKey(r.subject); if (!perRole.has(k)) perRole.set(k, []); perRole.get(k).push(r); }
-      for (const { user, role } of roleMap.values()) { const rs = perRole.get(normKey(role)); if (!rs) continue; for (const r of rs) out.push({ ...r, subject: user, role }); }
+      const unmapped = [...subjects].filter(s => !roles.has(s));
+      if (unmapped.length) warnings.push(`columns ${unmapped.map(u => `"${records.find(r => normKey(r.subject) === u).subject}"`).join(', ')} are not roles in "${roleSheet.name}" and were kept as users`);
+      const noRole = [];
+      for (const { user, role } of roleMap.values()) { const rs = perRole.get(normKey(role)); if (!rs) { noRole.push(`${user} (${role})`); continue; } for (const r of rs) out.push({ ...r, subject: user, role }); }
+      if (noRole.length) warnings.push(`${noRole.length} user(s) in "${roleSheet.name}" have a role with no column in the permission sheet and got no expectations: ${noRole.slice(0, 6).join(', ')}${noRole.length > 6 ? ', …' : ''}`);
+      for (const u of unmapped) out.push(...perRole.get(u));
       records = out; expanded = true;
-    }
+    } else warnings.push(`"${roleSheet.name}" looks like a user → role sheet, but the permission sheet is not keyed by those roles, so it was not used`);
   }
-  return { sheet: main.name, layout: res.layout, records, roleMap: roleMap ? Object.fromEntries([...roleMap.values()].map(v => [v.user, v.role])) : null, expanded };
+  return { sheet: used.join(' + '), sheets: used, layout, records, roleMap: roleMap ? Object.fromEntries([...roleMap.values()].map(v => [v.user, v.role])) : null, expanded, warnings, ignoredSheets: ignored };
 }
