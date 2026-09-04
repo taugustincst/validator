@@ -17,8 +17,8 @@ eCW security settings validation — FAIL
   baseline:   baseline.xlsx [Permissions; grid, settings down / users across; roles expanded to users]
   eCW export: ecw-export.xlsx [Security Settings; one row per user + setting]
   users: 9 in baseline, 9 in eCW, 8 in both
-  settings: 30 in baseline, 31 in eCW, 30 in both
-  compared 240 user/setting pairs: 235 match
+  settings: 36 in baseline, 37 in eCW, 36 in both
+  compared 288 user/setting pairs: 283 match
   findings: 3 high, 4 medium, 2 low, 6 info
   catalog: Security_Setting.xlsx — 1147 settings, 36 covered by the baseline, 1 not covered but granted to someone in eCW
 
