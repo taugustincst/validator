@@ -12,7 +12,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validate, inspect, loadAliases, loadCatalog, buildTemplate, buildReport, findingsCsv } from './index.js';
+import { validate, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, buildReport, findingsCsv } from './index.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PAGE = path.join(here, '..', 'web', 'index.html');
@@ -31,13 +31,14 @@ const toFile = (f, label) => {
   if (!data.length) throw Object.assign(new Error(`${label} file is empty`), { status: 400 });
   return { name: String(f.name || label).slice(0, 200), data };
 };
-const perFile = o => ({ sheet: o?.sheet || undefined, layout: o?.layout || undefined, orientation: o?.orientation || undefined, rolesSheet: o?.rolesSheet || undefined, subjectCol: o?.subjectCol || undefined, permissionCol: o?.permissionCol || undefined, valueCol: o?.valueCol || undefined, categoryCol: o?.categoryCol || undefined, blankIsNo: o?.blankIsNo !== false });
+const perFile = o => ({ ignoreSubjects: o?.ignoreSubjects || undefined, sheet: o?.sheet || undefined, layout: o?.layout || undefined, orientation: o?.orientation || undefined, rolesSheet: o?.rolesSheet || undefined, subjectCol: o?.subjectCol || undefined, permissionCol: o?.permissionCol || undefined, valueCol: o?.valueCol || undefined, categoryCol: o?.categoryCol || undefined, blankIsNo: o?.blankIsNo !== false });
 
 export function runFromBody(body) {
   const o = body.options || {};
   const aliases = body.aliases?.data ? loadAliases(toFile(body.aliases, 'aliases')) : (o.aliases || undefined);
+  const users = body.users?.data ? loadUsersFile(toFile(body.users, 'users file')) : undefined;
   return validate(toFile(body.baseline, 'baseline'), toFile(body.actual, 'eCW export'), {
-    baseline: perFile(o.baseline), actual: perFile(o.actual), catalog: body.catalog?.data ? toFile(body.catalog, 'catalog') : undefined,
+    baseline: { ...perFile(o.baseline), usersFile: users }, actual: perFile(o.actual), catalog: body.catalog?.data ? toFile(body.catalog, 'catalog') : undefined,
     compare: { ignoreUsers: o.ignoreUsers || '', ignorePermissions: o.ignorePermissions || '', onlyUsers: o.onlyUsers || '', aliases, matchByName: o.matchByName !== false, reportUnknownPermissions: o.reportUnknownPermissions !== false, reportOk: !!o.reportOk },
   });
 }
@@ -61,7 +62,7 @@ export function createServer() {
         const ct = String(req.headers['content-type'] || '');
         if (!/application\/json/i.test(ct)) return json(415, { error: 'send application/json' });
         let body; try { body = JSON.parse((await readBody(req)).toString('utf8')); } catch (e) { return json(e.status || 400, { error: e.status ? e.message : 'invalid JSON body' }); }
-        if (url.pathname === '/api/inspect') return json(200, inspect(toFile(body.file, 'file'), perFile(body.options), body.label || 'file'));
+        if (url.pathname === '/api/inspect') { const o = perFile(body.options); if (body.users?.data) o.usersFile = loadUsersFile(toFile(body.users, 'users file')); if (body.catalog?.data) o.catalog = toFile(body.catalog, 'catalog'); return json(200, inspect(toFile(body.file, 'file'), o, body.label || 'file')); }
         if (url.pathname === '/api/template') { const cat = loadCatalog(toFile(body.catalog, 'catalog')); const roles = Array.isArray(body.roles) && body.roles.length ? body.roles.map(String) : undefined; const groups = Array.isArray(body.groups) && body.groups.length ? body.groups.map(String) : null; return send(200, buildTemplate(cat, { roles, groups }), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', { 'Content-Disposition': 'attachment; filename="baseline-template.xlsx"' }); }
         const v = runFromBody(body);
         if (url.pathname === '/api/validate') return json(200, view(v));

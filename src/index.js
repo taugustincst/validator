@@ -3,7 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { readSpreadsheet, buildXlsx } from './xlsx.js';
-import { workbookToRecords, extractRecords, findHeaderRow, clean, normKey } from './parse.js';
+import { workbookToRecords, extractRecords, extractRoleMap, findHeaderRow, clean, normKey } from './parse.js';
+import { lookup, bareName } from './catalog.js';
+import { closest } from './validate.js';
 import { compare } from './validate.js';
 import { buildReport, textSummary, findingsCsv, reportSheets } from './report.js';
 import { workbookToCatalog, detectCatalog, extractCatalog } from './catalog.js';
@@ -24,7 +26,8 @@ function readAny(src, label) {
 /**
  * Validate an eCW export against a baseline.
  *   baseline / actual: a file path, or { name, data: Buffer }
- *   opts.baseline / opts.actual: per-file parse options ({ sheet, layout, subjectCol, permissionCol, valueCol, categoryCol, orientation, blankIsNo, rolesSheet })
+ *   opts.baseline / opts.actual: per-file parse options ({ sheet, layout, subjectCol, permissionCol, valueCol, categoryCol, orientation, blankIsNo, rolesSheet,
+ *                                ignoreSubjects (globs: role/user columns or rows to leave out), usersFile (a user → role file applied to a role-keyed baseline) })
  *   opts.compare: { ignoreUsers, ignorePermissions, onlyUsers, aliases, matchByName, reportUnknownPermissions, reportOk }
  *   opts.catalog: eCW's settings catalog — a file path or { name, data }, or an already-loaded catalog (optional)
  * Returns { result, meta, baseline: { sheet, layout, records, warnings }, actual: {...}, catalog }.
@@ -32,7 +35,7 @@ function readAny(src, label) {
 export function validate(baseline, actual, opts = {}) {
   const load = (src, o, label) => {
     const wb = readAny(src, label);
-    try { return { name: nameOf(src, label), ...workbookToRecords(wb, o || {}) }; }
+    try { return { name: nameOf(src, label), ...workbookToRecords(wb, withUsersFile(o || {})) }; }
     catch (e) { throw new Error(`${label} (${nameOf(src, label)}): ${e.message}`); }
   };
   const b = load(baseline, opts.baseline, 'baseline');
@@ -50,6 +53,14 @@ export function validate(baseline, actual, opts = {}) {
   };
   return { result, meta, baseline: b, actual: a, catalog: cat };
 }
+
+/** A user → role file (User | Role columns; .csv or .xlsx) for a baseline whose columns are roles. Returns a Map (see extractRoleMap). */
+export function loadUsersFile(src) {
+  const wb = readAny(src, 'users file');
+  for (const s of wb.sheets) { const m = extractRoleMap(s.rows); if (m) return m; }
+  throw new Error(`users file (${nameOf(src, 'users file')}): needs a User column and a Role column`);
+}
+const withUsersFile = o => { if (!o.usersFile) return o; const roleMap = o.usersFile instanceof Map ? o.usersFile : loadUsersFile(o.usersFile); return { ...o, roleMap, roleMapName: typeof o.usersFile === 'string' ? path.basename(o.usersFile) : (o.usersFile?.name || 'users file') }; };
 
 /** Load eCW's settings catalog from a file path or { name, data }. */
 export function loadCatalog(src) {
@@ -77,7 +88,7 @@ export function inspect(src, opts = {}, label = 'file') {
     }
   }
   try {
-    const x = workbookToRecords(wb, opts);
+    const x = workbookToRecords(wb, withUsersFile(opts));
     const users = new Map(), settings = new Map(), values = new Map();
     for (const r of x.records) { users.set(r.subject, (users.get(r.subject) || 0) + 1); settings.set(r.permission, (settings.get(r.permission) || 0) + 1); values.set(r.value, (values.get(r.value) || 0) + 1); }
     Object.assign(out, {
@@ -88,8 +99,19 @@ export function inspect(src, opts = {}, label = 'file') {
       values: [...values].map(([value, n]) => ({ value: value || '(blank)', count: n })).sort((a, b) => b.count - a.count),
       sample: x.records.slice(0, 10).map(r => ({ user: r.subject, setting: r.permission, value: r.value, raw: r.raw, row: r.row, sheet: r.sheet })),
     });
+    if (opts.catalog) out.catalogCheck = catalogCheck(x.records, opts.catalog.settings ? opts.catalog : loadCatalog(opts.catalog));
   } catch (e) { out.error = e.message; out.warnings = []; }
   return out;
+}
+
+/** Which of a file's setting names the catalog knows, which it does not (with the closest real name), and which catalog settings the file never mentions. */
+export function catalogCheck(records, cat) {
+  const names = new Map(); for (const r of records) if (!names.has(normKey(r.permission))) names.set(normKey(r.permission), r.permission);
+  const catNames = new Map([...cat.byKey].map(([k, v]) => [k, v.name]));
+  const unknown = [], known = new Set();
+  for (const [k, name] of names) { const c = lookup(cat, name); if (c) known.add(normKey(c.name)); else { const near = closest(normKey(bareName(cat, name)), catNames, 0.6); unknown.push({ name, suggestion: near?.name || '', group: near ? cat.byKey.get(near.key)?.group || '' : '' }); } }
+  const uncovered = cat.settings.filter(s => !known.has(normKey(s.name))).map(s => ({ name: s.name, group: s.group }));
+  return { catalog: cat.name ? path.basename(cat.name) : 'catalog', total: cat.settings.length, known: known.size, unknown, uncovered };
 }
 
 const extractCatalogSafe = rows => { try { return extractCatalog(rows); } catch { return null; } };

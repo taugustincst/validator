@@ -8,7 +8,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
-import { validateToFile, inspect, loadAliases, loadCatalog, buildTemplate, textSummary } from '../src/index.js';
+import { validateToFile, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, textSummary } from '../src/index.js';
 
 const [major] = process.versions.node.split('.').map(Number);
 if (major < 20) { process.stderr.write(`ecw-validate needs Node.js 20 or newer (this is ${process.version}). Install it from https://nodejs.org\n`); process.exit(2); }
@@ -17,7 +17,7 @@ const HELP = `ecw-validate — validate eClinicalWorks security settings against
 
 Usage
   ecw-validate validate --baseline <file> --actual <file> [--out report.xlsx] [options]
-  ecw-validate inspect <file> [--sheet NAME] [--layout long|matrix] ...
+  ecw-validate inspect <file> [--sheet NAME] [--layout long|matrix] [--catalog <file>] ...
   ecw-validate serve [--port 8787] [--host 127.0.0.1] [--open]
   ecw-validate template --catalog <file> [--out baseline-template.xlsx] [--roles a,b,c] [--groups "Billing,Progress Notes"]
   ecw-validate example [dir]
@@ -33,6 +33,9 @@ Options (prefix with --baseline- or --actual- to apply to one file only, e.g. --
   --orientation permissions-down|users-down   matrix orientation
   --user-col NAME         column holding the user (long layout)      also --permission-col, --value-col, --category-col
   --roles-sheet NAME      user → role mapping sheet in the baseline (expands role rows to users)
+  --users FILE            user → role list in a separate .csv/.xlsx (User | Role) when the baseline's columns are roles
+  --ignore-roles a*,b     role or user columns (grid) / rows (list) to leave out while reading, e.g. "eCW SUPPORT*"
+
   --blank-is-unknown      a blank matrix cell is "not stated" rather than "not granted"
 Catalog
   --catalog FILE          eCW's Security Settings catalog export (setting name / description / type / group). Findings
@@ -69,7 +72,7 @@ function parseArgs(argv) {
 
 const fileOpts = (args, prefix) => {
   const g = k => args[`${prefix}-${k}`] ?? args[k];
-  const o = { sheet: g('sheet'), layout: g('layout'), orientation: g('orientation'), subjectCol: g('user-col'), permissionCol: g('permission-col'), valueCol: g('value-col'), categoryCol: g('category-col'), rolesSheet: g('roles-sheet'), blankIsNo: !g('blank-is-unknown') };
+  const o = { sheet: g('sheet'), layout: g('layout'), orientation: g('orientation'), subjectCol: g('user-col'), permissionCol: g('permission-col'), valueCol: g('value-col'), categoryCol: g('category-col'), rolesSheet: g('roles-sheet'), usersFile: g('users'), ignoreSubjects: g('ignore-roles'), blankIsNo: !g('blank-is-unknown') };
   for (const k of Object.keys(o)) if (o[k] === undefined || o[k] === true) delete o[k];
   if (o.blankIsNo === undefined) o.blankIsNo = true;
   return o;
@@ -88,7 +91,7 @@ async function main(argv) {
       compare: { ignoreUsers: args['ignore-users'], ignorePermissions: args['ignore-settings'] ?? args['ignore-permissions'], onlyUsers: args['only-users'], aliases: typeof args.aliases === 'string' ? loadAliases(args.aliases) : undefined, matchByName: !args['no-match-by-name'], reportUnknownPermissions: !args['no-unknown-settings'], reportOk: !!args['include-ok'] },
     };
     if (typeof args.catalog === 'string') opts.catalog = args.catalog;
-    for (const [k, f] of [['baseline', args.baseline], ['actual', args.actual], ['catalog', opts.catalog], ['aliases', typeof args.aliases === 'string' ? args.aliases : undefined]]) if (f && !fs.existsSync(f)) { process.stderr.write(`error: ${k} file not found: ${f}\n`); return 2; }
+    for (const [k, f] of [['baseline', args.baseline], ['actual', args.actual], ['catalog', opts.catalog], ['aliases', typeof args.aliases === 'string' ? args.aliases : undefined], ['users', opts.baseline.usersFile]]) if (f && !fs.existsSync(f)) { process.stderr.write(`error: ${k} file not found: ${f}\n`); return 2; }
     const v = validateToFile(args.baseline, args.actual, out, opts);
     if (args.json) process.stdout.write(JSON.stringify({ meta: v.meta, ...v.result }, null, 2) + '\n');
     else if (args.quiet) process.stdout.write(`${v.result.pass ? 'PASS' : 'FAIL'}: ${v.result.bySeverity.high} high, ${v.result.bySeverity.medium} medium, ${v.result.bySeverity.low} low, ${v.result.bySeverity.info} info\n`);
@@ -102,7 +105,8 @@ async function main(argv) {
   if (cmd === 'inspect') {
     const file = args._[1]; if (!file) { process.stderr.write('inspect needs a file\n'); return 2; }
     if (!fs.existsSync(file)) { process.stderr.write(`error: file not found: ${file}\n`); return 2; }
-    const x = inspect(file, fileOpts(args, 'baseline'));
+    const io = fileOpts(args, 'baseline'); if (typeof args.catalog === 'string') { if (!fs.existsSync(args.catalog)) { process.stderr.write(`error: catalog file not found: ${args.catalog}\n`); return 2; } io.catalog = args.catalog; }
+    const x = inspect(file, io);
     if (args.json) { process.stdout.write(JSON.stringify(x, null, 2) + '\n'); return x.error ? 1 : 0; }
     const w = process.stdout.write.bind(process.stdout);
     w(`${file}: ${x.sheets.length} sheet(s)\n`);
@@ -125,6 +129,13 @@ async function main(argv) {
     for (const m of x.warnings) w(`  ! ${m}\n`);
     w(`\n  first records:\n`);
     for (const r of x.sample.slice(0, Number(args.limit) || 8)) w(`    row ${String(r.row).padStart(4)}  ${r.user.padEnd(18)} ${r.setting.padEnd(44)} ${r.value}${String(r.raw) !== r.value ? ` (cell: ${JSON.stringify(r.raw)})` : ''}\n`);
+    if (x.catalogCheck) {
+      const c = x.catalogCheck;
+      w(`\n  against the catalog ${c.catalog} (${c.total} settings): ${c.known} of this file's ${x.settings.length} settings are known, ${c.unknown.length} are not; ${c.uncovered.length} catalog settings are not in this file\n`);
+      for (const u of c.unknown.slice(0, Number(args.limit) || 40)) w(`    ? ${u.name}${u.suggestion ? `  → closest: "${u.suggestion}" (${u.group})` : ''}\n`);
+      if (c.unknown.length > (Number(args.limit) || 40)) w(`    … ${c.unknown.length - (Number(args.limit) || 40)} more (--json for all)\n`);
+      if (c.uncovered.length) w(`    not in this file: ${c.uncovered.slice(0, 10).map(u => u.name).join(' | ')}${c.uncovered.length > 10 ? ' | …' : ''}\n`);
+    }
     return 0;
   }
 

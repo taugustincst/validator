@@ -70,13 +70,19 @@ export function workbookToCatalog(wb, opts = {}) {
   throw new Error(`no security settings catalog found${opts.sheet ? ` on sheet "${opts.sheet}"` : ''} (sheets: ${sheets.map(s => s.name).join(', ')})`);
 }
 
-/** Look a permission name up in the catalog: exact, then by the part after "Category >". */
+/**
+ * Look a permission name up in the catalog: the whole name first, then with leading "Group >"
+ * segments stripped one at a time — a setting's own name may contain ">" ("Allow access to
+ * Billing window > Done Button"), so the prefix is peeled from the left, never split from the right.
+ */
 export function lookup(cat, permission) {
   if (!cat) return null;
-  const k = normKey(permission);
-  if (cat.byKey.has(k)) return cat.byKey.get(k);
-  const i = String(permission).lastIndexOf('>');
-  if (i >= 0) { const s = normKey(String(permission).slice(i + 1)); if (cat.byKey.has(s)) return cat.byKey.get(s); }
-  // "Group > Name" where the group is the catalog's group: strip it and retry
+  const parts = String(permission ?? '').split('>');
+  for (let i = 0; i < parts.length; i++) {
+    const k = normKey(parts.slice(i).join('>'));
+    if (k && cat.byKey.has(k)) return cat.byKey.get(k);
+  }
   return null;
 }
+/** The setting's own name, with a leading "Group >" prefix removed when the catalog says so; otherwise the name unchanged. */
+export const bareName = (cat, permission) => { const c = lookup(cat, permission); if (c) return c.name; const i = String(permission).indexOf('>'); return i >= 0 ? String(permission).slice(i + 1).trim() : String(permission); };

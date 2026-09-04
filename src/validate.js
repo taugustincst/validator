@@ -18,7 +18,7 @@
 // Anything still unmatched is reported with its closest candidate ("did you mean …") but is never
 // silently matched — a wrong guess would hide a real discrepancy.
 import { normKey, isGranted } from './parse.js';
-import { lookup } from './catalog.js';
+import { lookup, bareName } from './catalog.js';
 
 export const SEVERITY = { high: 3, medium: 2, low: 1, info: 0 };
 export const TYPE_LABEL = {
@@ -189,7 +189,7 @@ function enrich(result, cat, B, A) {
   for (const d of result.detail) for (const s of d.settings) tag(s, s.permission);
   const catNames = new Map([...cat.byKey].map(([k, v]) => [k, v.name]));
   const unknown = [];
-  for (const [pk, name] of B.perms) if (!lookup(cat, name)) { const near = closest(pk.includes(' > ') ? pk.slice(pk.lastIndexOf(' > ') + 3) : pk, catNames, 0.6); unknown.push({ name, suggestion: near?.name || '', group: near ? cat.byKey.get(near.key)?.group || '' : '' }); }
+  for (const [pk, name] of B.perms) if (!lookup(cat, name)) { const near = closest(normKey(bareName(cat, name)), catNames, 0.6); unknown.push({ name, suggestion: near?.name || '', group: near ? cat.byKey.get(near.key)?.group || '' : '' }); }
   const ecwUnknown = [];
   for (const [pk, name] of A.perms) if (!lookup(cat, name)) ecwUnknown.push(name);
   // Coverage: which catalog settings the baseline says something about, and how many eCW users hold each.

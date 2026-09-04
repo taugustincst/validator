@@ -113,10 +113,27 @@ The grid can also be the other way round (users down, settings across).
 
 *A list* — one row per user and setting, like the eCW export.
 
-**Roles.** If the grid's columns are roles rather than people, add a second sheet named `Users`
-(or `Roles`, `Mapping`, `Staff`…) with a `User` column and a `Role` column. Each role's settings are
-expanded to its users before the comparison. Users whose role has no column, and columns that are
-not roles, are pointed out.
+A real practice master matrix looks like this and reads as-is: setting name, a description column
+and a group column, then one column per role, `X` or `x` for granted and blank for not:
+
+| Security Item | Description / Action | Security Group Name | APPS Admin | Billing | Provider | Read Only |
+|---|---|---|---|---|---|---|
+| Delete Payments | Grants or denies… | Administration / Billing Setup | X | x | | |
+| Lock Chart | Allows the user to lock… | Progress Notes | | | X (added 9/13/24 | |
+
+The description and group columns are recognised as such (never as users), a tick with a note on
+it (`x - added 1/16/2024`, `ADDED 6/12`) counts as granted and is listed so you know, text pasted
+where a tick should be is flagged with its row and column and compared as text (so it shows up as a
+difference rather than being guessed), duplicated setting rows are named and it says whether the
+copies agree, and a column whose header says it should not be validated is pointed out.
+`--ignore-roles "eCW SUPPORT*"` (or *Leave out roles/users* in the UI) drops such columns.
+
+**Roles.** If the grid's columns are roles rather than people, the comparison needs to know which
+user has which role. Either add a sheet named `Users` (or `Roles`, `Mapping`, `Staff`…) to the
+workbook with a `User` column and a `Role` column, or keep the list in a separate file and pass it
+with `--users users.xlsx` (or the *Users → roles file* drop zone). Each role's settings are expanded
+to its users before the comparison. Users whose role has no column, columns that are not roles, and
+a role-keyed matrix with no user list at all are pointed out.
 
 **The catalog (optional, recommended).** With `--catalog` (or the third drop zone):
 
@@ -125,6 +142,10 @@ not roles, are pointed out.
   (`Delete Payment → closest: "Delete Payments" (Administration / Billing Setup)`);
 - a **Coverage** view lists every catalog setting with whether the baseline covers it and how many
   eCW users hold it, so an uncovered setting that someone holds stands out as a decision to make;
+- `ecw-validate inspect matrix.xlsx --catalog Security_Setting.xlsx` cross-checks a baseline on its
+  own: which of its setting names eCW knows, which it does not (with the closest real name), and
+  which catalog settings it never mentions. The UI shows the same under the baseline preview once
+  a catalog is loaded.
 - `ecw-validate template --catalog Security_Setting.xlsx --out baseline-template.xlsx --roles "Provider,Nurse,Front Desk,Biller,Practice Admin"`
   (or *Build baseline template* in the UI) writes a baseline to fill in: one row per catalog
   setting with its group and description, a Y/N column per role, and a Users sheet for the
@@ -224,6 +245,8 @@ ecw-validate validate --baseline <file> --actual <file> [--out report.xlsx]
     --orientation permissions-down|users-down
     --user-col / --permission-col / --value-col / --category-col NAME
     --roles-sheet NAME            user → role sheet in the baseline
+    --users FILE                  user → role list in a separate file (User | Role)
+    --ignore-roles a*,b           role/user columns or rows to leave out while reading
     --blank-is-unknown            a blank grid cell is "not stated" rather than "not granted"
     (prefix any of the above with --baseline- or --actual- for one file only)
     --catalog FILE                eCW's Security Settings catalog export (see above)
@@ -234,7 +257,7 @@ ecw-validate validate --baseline <file> --actual <file> [--out report.xlsx]
     --include-ok                  list matching pairs too
     --json | --quiet | --limit N  output control
     --fail-on high|medium|low|none   exit-code threshold (default medium)
-ecw-validate inspect <file> [reading options]   how the file is read
+ecw-validate inspect <file> [reading options] [--catalog FILE]   how the file is read (+ names checked against the catalog)
 ecw-validate serve [--port N] [--host H] [--open]  the web UI
 ecw-validate template --catalog FILE [--out F] [--roles a,b] [--groups g1,g2]   a baseline to fill in
 ecw-validate example [dir]                     write a sample baseline + eCW export

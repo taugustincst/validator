@@ -6,9 +6,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { buildXlsx, readXlsx, parseCsv, readSpreadsheet, unzip, zip as buildZip } from '../src/xlsx.js';
-import { normalizeValue, detectLayout, extractRecords, extractRoleMap, workbookToRecords, findHeaderRow } from '../src/parse.js';
+import { normalizeValue, isAnnotated, detectLayout, extractRecords, extractRoleMap, workbookToRecords, findHeaderRow } from '../src/parse.js';
 import { compare, similarity, closest } from '../src/validate.js';
-import { validate, validateToFile, textSummary, findingsCsv, inspect, loadAliases, loadCatalog, buildTemplate } from '../src/index.js';
+import { validate, validateToFile, textSummary, findingsCsv, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, catalogCheck } from '../src/index.js';
 import { detectCatalog, lookup } from '../src/catalog.js';
 import { serve } from '../src/server.js';
 import { writeExamples, baselineSheets, ecwExportRows, catalogRows, DEVIATIONS, SETTINGS, CATALOG_EXTRA } from '../examples/make-examples.js';
@@ -332,7 +332,7 @@ test('parse: warnings say what was skipped, duplicated or kept as a level', () =
   const rows = [['User', 'Setting', 'Value'], ['jdoe', 'A', 'Y'], ['', 'B', 'N'], ['jdoe', 'A', 'N'], ['jdoe', 'C', 'Read Only']];
   const { records, warnings } = extractRecords(rows, { name: 'S' });
   assert.equal(records.length, 4);
-  assert.ok(warnings.some(w => /1 user\/setting pair\(s\) appear more than once/.test(w)), warnings.join('\n'));
+  assert.ok(warnings.some(w => /1 setting\(s\) appear more than once \(the LAST row wins\): "A" rows 2\/4 — the copies DISAGREE/.test(w)), warnings.join("\n"));
   assert.ok(warnings.some(w => /"read only"×1/.test(w)));
   const orphan = extractRecords([['User', 'Setting', 'Value'], ['', 'A', 'Y'], ['jdoe', 'B', 'Y']], { name: 'S' });
   assert.ok(orphan.warnings.some(w => /1 row\(s\) had a setting but no user above them/.test(w)));
@@ -456,4 +456,85 @@ test('catalog: CLI --catalog and template; server /api/template and catalog in t
     res = await post('/api/template', { catalog: { name: 'c.xlsx', data: b64(CATALOG) }, roles: ['X'] }); assert.equal(res.status, 200); assert.equal(readXlsx(Buffer.from(await res.arrayBuffer())).sheets[0].rows[0].length, 4);
     res = await post('/api/template', { catalog: { name: 'b.xlsx', data: b64(BASELINE) } }); assert.equal(res.status, 400); assert.match((await res.json()).error, /no security settings catalog found/);
   } finally { await s.close(); }
+});
+
+// ───────── a real-world master matrix: Setting | Description | Group | 28 role columns, X ticks with notes ─────────
+
+const MATRIX = [
+  ['Security Item in NEW VERSION IN TEST - DO NOT SORT THIS LIST  ', ' Description/ Action - DO NOT SORT THIS LIST ', 'Security Group Name - DO NOT SORT THIS LIST', 'APPS Admin ', 'Billing ', 'eCW SUPPORT-DONT NEED TO VALIDATE', 'Provider', 'Read Only '],
+  ['Delete Payments', 'Grants or denies users permission to delete both patient and insurance payments', 'Administration / Billing Setup', 'X', 'x', 'x', '', ''],
+  ['Lock Chart', 'Allows the user to lock the chart', 'Progress Notes', '', '', 'x', 'X (added 9/13/24', ''],
+  ['Eligibility Admin', 'Manage Eligibility Admin', 'Administration / Billing Setup', 'x', 'ADDED 6/12', '', '', ''],
+  ['Configure Letter Category', 'Allows custom letter categories', 'Documents', '', 'Configure Letter Category', '', '', ''],
+  ['Accounts LookUp', 'first copy', 'Billing', 'X', '', '', '', ''],
+  ['Accounts LookUp', 'second copy', 'Billing', '', 'X', '', '', ''],
+  ['', '', '', '', 'x', '', '', ''],
+  [], [], [],
+];
+
+test('matrix: description and group columns beside the setting are metadata, not users; ticks with notes are grants; oddities are named', () => {
+  const lay = detectLayout(MATRIX);
+  assert.equal(lay.layout, 'matrix'); assert.equal(lay.orientation, 'permissions-down');
+  assert.deepEqual([lay.permissionCol, lay.descriptionCol, lay.categoryCol, lay.firstDataCol], [0, 1, 2, 3]);
+  const { records, warnings } = extractRecords(MATRIX, { name: 'M' });
+  const subjects = [...new Set(records.map(r => r.subject))];
+  assert.deepEqual(subjects, ['APPS Admin', 'Billing', 'eCW SUPPORT-DONT NEED TO VALIDATE', 'Provider', 'Read Only'], 'header cells are trimmed; description/group are not users');
+  const get = (u, p) => records.filter(r => r.subject === u && r.permission === p).pop();
+  assert.equal(get('APPS Admin', 'Administration / Billing Setup > Delete Payments').value, 'Y');
+  assert.equal(get('Provider', 'Administration / Billing Setup > Delete Payments').value, 'N', 'blank = not granted');
+  assert.equal(get('Provider', 'Progress Notes > Lock Chart').value, 'Y', '"X (added 9/13/24" is a tick with a note');
+  assert.equal(get('Billing', 'Administration / Billing Setup > Eligibility Admin').value, 'Y', '"ADDED 6/12" is a tick with a note');
+  assert.equal(get('Billing', 'Documents > Configure Letter Category').value, 'configure letter category', 'pasted text is kept as text, not guessed');
+  assert.equal(get('Billing', 'Billing > Accounts LookUp').value, 'Y', 'the LAST duplicate row wins');
+  for (const v of ['x - added 1/16/2024', 'added 8/29', 'X (added 9/13/24', 'x ']) assert.equal(normalizeValue(v), 'Y', v);
+  assert.equal(isAnnotated('x - added 1/16/2024'), true); assert.equal(isAnnotated('X'), false); assert.equal(isAnnotated(''), false);
+  const W = warnings.join('\n');
+  assert.match(W, /"eCW SUPPORT-DONT NEED TO VALIDATE" look like they should be left out/);
+  assert.match(W, /2 cell\(s\) carry a note on a tick and were read as GRANTED: row 3 Provider "X \(added 9\/13\/24"; row 4 Billing "ADDED 6\/12"/);
+  assert.match(W, /1 cell\(s\) contain text instead of a tick[\s\S]*row 5 Billing "Configure Letter Category"/);
+  assert.match(W, /1 setting\(s\) appear more than once \(the LAST row wins\): "Billing > Accounts LookUp" rows 6\/7 — the copies DISAGREE/);
+  assert.match(W, /1 row\(s\) had values but no name in the first column and were skipped: row 8 \("x" under Billing\)/);
+  assert.doesNotMatch(W, /configure letter category.*kept as levels/, 'pasted text is not also reported as a level');
+  // ignoreSubjects drops a role column while reading
+  const dropped = extractRecords(MATRIX, { name: 'M', ignoreSubjects: 'eCW SUPPORT*, Read*' });
+  assert.deepEqual([...new Set(dropped.records.map(r => r.subject))], ['APPS Admin', 'Billing', 'Provider']);
+  assert.match(dropped.warnings.join('\n'), /left out as asked: "eCW SUPPORT-DONT NEED TO VALIDATE", "Read Only"/);
+  // the workbook has no Users sheet and the columns look like roles: say so
+  const x = workbookToRecords({ sheets: [{ name: 'UPGRADE V12.0.4', rows: MATRIX }, { name: 'Sheet1', rows: [] }] });
+  assert.equal(x.expanded, false); assert.match(x.warnings.join('\n'), /columns look like ROLES[\s\S]*no user → role sheet/);
+});
+
+test('matrix: a separate users → roles file expands the role columns to users', () => {
+  const uf = path.join(tmp, 'users.csv'); fs.writeFileSync(uf, 'User,Role\r\njdoe,APPS Admin\r\nasmith,Provider\r\nbwho,Nobody\r\n');
+  const m = loadUsersFile(uf); assert.equal(m.size, 3);
+  const x = workbookToRecords({ sheets: [{ name: 'M', rows: MATRIX }] }, { roleMap: m, roleMapName: 'users.csv' });
+  assert.equal(x.expanded, true, 'an explicit users file expands even when it covers only some of the role columns');
+  assert.deepEqual([...new Set(x.records.map(r => r.subject))].sort(), ['Billing', 'Read Only', 'asmith', 'eCW SUPPORT-DONT NEED TO VALIDATE', 'jdoe'], 'mapped roles become users; unmapped role columns stay as they are');
+  assert.equal(x.records.find(r => r.subject === 'jdoe' && r.permission === 'Administration / Billing Setup > Delete Payments').value, 'Y');
+  assert.match(x.warnings.join('\n'), /bwho \(Nobody\)/);
+  const bad = path.join(tmp, 'notusers.csv'); fs.writeFileSync(bad, 'a,b\n1,2\n');
+  assert.throws(() => loadUsersFile(bad), /needs a User column and a Role column/);
+  // end to end through validate(): baseline = the matrix + users file, actual = a per-user list
+  const mf = path.join(tmp, 'matrix.xlsx'); fs.writeFileSync(mf, buildXlsx([{ name: 'UPGRADE V12.0.4', rows: MATRIX }]));
+  const af = path.join(tmp, 'peruser.csv'); fs.writeFileSync(af, 'User Name,Category,Security Setting,Value\r\nJDOE,Administration / Billing Setup,Delete Payments,Yes\r\nJDOE,Progress Notes,Lock Chart,Yes\r\nASMITH,Progress Notes,Lock Chart,Yes\r\n');
+  const v = validate(mf, af, { baseline: { usersFile: uf, ignoreSubjects: 'eCW SUPPORT*' } });
+  assert.equal(v.result.users.both, 2);
+  assert.equal(v.result.findings.find(f => f.user === 'jdoe' && f.type === 'excess').permission, 'Progress Notes > Lock Chart');
+  assert.match(v.meta.baselineLayout, /roles expanded to users/);
+});
+
+test('catalog: lookup peels "Group >" prefixes from the left, so a setting whose name contains ">" is found; inspect cross-checks a file', () => {
+  const cat = loadCatalog(CATALOG);
+  const rows = [['Security Setting Name', 'Security Setting Description', 'Security Setting Type', 'Security group Name'], ['Allow access to Billing window > Done Button', 'd', 'Old', 'Administration / Billing Setup'], ['Lock Chart', 'd', 'Old', 'Progress Notes'], ['Delete Payments', 'd', 'Old', 'Administration / Billing Setup']];
+  const c2 = { name: 'c', ...loadCatalog({ name: 'c.xlsx', data: buildXlsx([{ name: 'S', rows }]) }) };
+  assert.equal(lookup(c2, 'Administration / Billing Setup > Allow access to Billing window > Done Button').name, 'Allow access to Billing window > Done Button');
+  assert.equal(lookup(c2, 'Allow access to Billing window > Done Button').name, 'Allow access to Billing window > Done Button');
+  assert.equal(lookup(c2, 'Progress Notes > Lock Chart').name, 'Lock Chart');
+  assert.equal(lookup(c2, 'Done Button'), null);
+  const x = inspect({ name: 'm.xlsx', data: buildXlsx([{ name: 'M', rows: MATRIX }]) }, { catalog: cat, ignoreSubjects: 'eCW SUPPORT*' });
+  const cc = x.catalogCheck;
+  assert.equal(cc.total, cat.settings.length); assert.equal(cc.known, 3, 'Delete Payments, Lock Chart, Accounts LookUp');
+  assert.deepEqual(cc.unknown.map(u => u.name).sort(), ['Administration / Billing Setup > Eligibility Admin', 'Documents > Configure Letter Category']);
+  assert.equal(cc.uncovered.length, cat.settings.length - 3);
+  assert.equal(catalogCheck([{ permission: 'Delete Payment' }], cat).unknown[0].suggestion, 'Delete Payments');
 });
