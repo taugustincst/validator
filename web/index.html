@@ -87,7 +87,16 @@
     </div>
   </div>
   <div class="card" style="margin-top:16px">
-    <h2>3 · Comparison options</h2>
+    <h2>3 · eCW settings catalog <span class="muted" style="font-weight:400;font-size:13px">(optional, recommended)</span></h2>
+    <p class="hint">eCW's Security Settings export that lists every setting with its description, type and group (Admin → Security Settings → export; ~1,100 rows, no users). With it, every finding shows the setting's group and what it controls, baseline names eCW does not know are flagged with the closest real name, and you get a coverage view of what the baseline never mentions. Drop it in the wrong slot and it is moved here automatically.</p>
+    <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start">
+      <label class="drop" id="dropC"><input type="file" id="fileC" accept=".xlsx,.xlsm,.csv,.tsv,.txt"><span>Drop the catalog here or click to choose</span></label>
+      <div><button id="tpl" disabled title="A baseline to fill in: one row per catalog setting with a Y/N column per role">Build baseline template</button><br><input type="text" id="tplRoles" placeholder="roles: Provider, Nurse, Front Desk, Biller, Practice Admin" style="margin-top:6px;width:280px"></div>
+    </div>
+    <div id="peekC"></div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h2>4 · Comparison options</h2>
     <div class="opts" style="grid-template-columns: repeat(4, 1fr)">
       <label>Ignore users (comma-separated, * wildcard) <input type="text" id="ignoreUsers" placeholder="e.g. test*, ecwadmin"></label>
       <label>Ignore settings <input type="text" id="ignorePerms" placeholder="e.g. Labs > *"></label>
@@ -112,7 +121,7 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const files = { baseline: null, actual: null, aliases: null };
+  const files = { baseline: null, actual: null, aliases: null, catalog: null };
   let last = null, sortKey = 'severity', sortDir = 1, tab = 'actions', pickedUser = null;
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const readFile = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res({ name: f.name, data: String(r.result).split(',')[1] || '' }); r.onerror = () => rej(r.error); r.readAsDataURL(f); });
@@ -121,7 +130,7 @@
   const RANK = { high: 3, medium: 2, low: 1, info: 0 };
 
   const fileOpts = p => ({ sheet: $(p + 'Sheet').value, layout: $(p + 'Layout').value, orientation: $(p + 'Orient').value, rolesSheet: p === 'b' ? $('bRoles').value : '', blankIsNo: p === 'a' ? $('aBlank').value === 'no' : true, subjectCol: $(p + 'UserCol').value, permissionCol: $(p + 'PermCol').value, valueCol: $(p + 'ValCol').value, categoryCol: $(p + 'CatCol').value });
-  const body = () => ({ baseline: files.baseline, actual: files.actual, aliases: files.aliases, options: { baseline: fileOpts('b'), actual: fileOpts('a'), ignoreUsers: $('ignoreUsers').value, ignorePermissions: $('ignorePerms').value, onlyUsers: $('onlyUsers').value, matchByName: $('matchByName').checked, reportUnknownPermissions: $('unknownPerms').checked } });
+  const body = () => ({ baseline: files.baseline, actual: files.actual, aliases: files.aliases, catalog: files.catalog, options: { baseline: fileOpts('b'), actual: fileOpts('a'), ignoreUsers: $('ignoreUsers').value, ignorePermissions: $('ignorePerms').value, onlyUsers: $('onlyUsers').value, matchByName: $('matchByName').checked, reportUnknownPermissions: $('unknownPerms').checked } });
 
   function wire(drop, input, key, after) {
     const set = async f => { if (!f) return; files[key] = await readFile(f); drop.classList.add('has'); drop.querySelector('span').innerHTML = `<b>${esc(f.name)}</b> · ${(f.size / 1024).toFixed(0)} KB`; $('run').disabled = !(files.baseline && files.actual); after && after(); };
@@ -130,17 +139,32 @@
     drop.addEventListener('dragleave', () => drop.classList.remove('over'));
     drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); set(e.dataTransfer.files[0]); });
   }
-  wire($('dropB'), $('fileB'), 'baseline', () => peek('b')); wire($('dropA'), $('fileA'), 'actual', () => peek('a')); wire($('dropAl'), $('fileAl'), 'aliases');
+  wire($('dropB'), $('fileB'), 'baseline', () => peek('b')); wire($('dropA'), $('fileA'), 'actual', () => peek('a')); wire($('dropAl'), $('fileAl'), 'aliases'); wire($('dropC'), $('fileC'), 'catalog', () => peek('c'));
+  const SLOT = { b: 'baseline', a: 'actual', c: 'catalog' };
+  function markDrop(p, f, note) { const d = $('drop' + p.toUpperCase()); if (!f) { d.classList.remove('has'); d.querySelector('span').textContent = p === 'c' ? 'Drop the catalog here or click to choose' : p === 'b' ? 'Drop the baseline here or click to choose' : 'Drop the eCW export here or click to choose'; return; } d.classList.add('has'); d.querySelector('span').innerHTML = `<b>${esc(f.name)}</b>${note ? ` <span class="muted">${esc(note)}</span>` : ''}`; }
   for (const p of ['b', 'a']) for (const id of ['Sheet', 'Layout', 'Orient', 'UserCol', 'PermCol', 'ValCol', 'CatCol']) $(p + id).addEventListener('change', () => peek(p));
   $('bRoles').addEventListener('change', () => peek('b')); $('aBlank').addEventListener('change', () => peek('a'));
 
   // ── "what is in this file": inspect on drop and on every option change ──
   async function peek(p) {
-    const key = p === 'b' ? 'baseline' : 'actual'; if (!files[key]) return;
+    const key = SLOT[p]; if (!files[key]) return;
     const box = $('peek' + p.toUpperCase()); box.innerHTML = '<div class="muted peek">reading…</div>';
     let x;
-    try { const r = await post('/api/inspect', { file: files[key], options: fileOpts(p), label: key }); x = await r.json(); if (!r.ok) throw new Error(x.error || r.statusText); }
+    try { const r = await post('/api/inspect', { file: files[key], options: p === 'c' ? {} : fileOpts(p), label: key }); x = await r.json(); if (!r.ok) throw new Error(x.error || r.statusText); }
     catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+    // A catalog dropped in the baseline or eCW slot is moved to the catalog slot, and the person is told.
+    if (x.kind === 'catalog' && p !== 'c') {
+      files.catalog = files[key]; files[key] = null; markDrop(p, null); markDrop('c', files.catalog, '· moved here: this is the settings catalog');
+      box.innerHTML = `<div class="warn"><b>${esc(x.name)}</b> is eCW's <b>settings catalog</b> (setting name, description, type, group — ${x.records} settings, no users, no grants), so it cannot be the ${key === 'baseline' ? 'baseline' : 'eCW export'}. It has been moved to the catalog slot below. For the eCW side, export the <b>per-user</b> security settings (one row per user and setting).</div>`;
+      $('run').disabled = !(files.baseline && files.actual); peek('c'); return;
+    }
+    if (p === 'c') {
+      $('tpl').disabled = x.kind !== 'catalog';
+      if (x.kind !== 'catalog') { box.innerHTML = `<div class="err">This does not look like the settings catalog (expected columns like Security Setting Name / Description / Type / Security group Name).${x.error ? ' ' + esc(x.error) : ''}</div>`; return; }
+      box.innerHTML = `<div class="peek"><div class="kv"><div>Read as</div><div><b>${esc(x.readAs)}</b> from sheet “${esc(x.sheet)}”</div><div>Found</div><div><b>${x.records}</b> settings in <b>${x.groups.length}</b> groups</div><div>Groups</div><div class="chips">${x.groups.map(g => `<span class="chip">${esc(g.group)} <span class="muted">${g.settings}</span></span>`).join('')}</div></div>
+        <details style="margin-top:8px"><summary>First settings as read</summary><div class="preview"><table><tr><th>row</th><th>setting</th><th>group</th><th>what it controls</th></tr>${x.sample.map(r => `<tr><td class="rn">${r.row}</td><td>${esc(r.setting)}</td><td>${esc(r.value)}</td><td class="muted">${esc(r.raw)}</td></tr>`).join('')}</table></div></details></div>`;
+      return;
+    }
     // sheet picker follows the file
     const sel = $(p + 'Sheet'); const cur = sel.value; sel.innerHTML = `<option value="">auto</option><option value="all">all sheets (merge)</option>` + x.sheets.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join(''); sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
     const usedSet = new Set(x.sheetsUsed || []);
@@ -179,6 +203,13 @@
     const blob = await r.blob(); const name = (r.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1] || `ecw-validation.${fmt}`;
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); $('status').textContent = '';
   };
+  $('tpl').addEventListener('click', async () => {
+    if (!files.catalog) return; $('status').textContent = 'building template…';
+    const roles = $('tplRoles').value.split(',').map(s => s.trim()).filter(Boolean);
+    const r = await post('/api/template', { catalog: files.catalog, roles });
+    if (!r.ok) { $('status').textContent = 'template failed: ' + ((await r.json()).error || r.statusText); return; }
+    const blob = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'baseline-template.xlsx'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); $('status').textContent = 'template downloaded — fill in Y/N per role, list users on the Users sheet, then drop it in as the baseline';
+  });
   $('dlX').addEventListener('click', () => download('xlsx')); $('dlC').addEventListener('click', () => download('csv')); $('dlJ').addEventListener('click', () => download('json'));
 
   // ── results ──
@@ -187,14 +218,14 @@
     const warn = [...(j.baseline.warnings || []).map(w => 'Baseline: ' + w), ...(j.actual.warnings || []).map(w => 'eCW export: ' + w)];
     $('out').innerHTML = `<div class="verdict ${j.pass ? 'pass' : 'fail'}">${j.pass ? 'PASS — eCW matches the baseline (no high or medium findings)' : `FAIL — ${c.high} high, ${c.medium} medium finding${c.high + c.medium === 1 ? '' : 's'}`}</div>
       <p class="muted" style="margin:8px 0 0">Baseline “${esc(j.baseline.name)}”: ${esc(j.baseline.readAs)}, ${j.baseline.records} records. eCW export “${esc(j.actual.name)}”: ${esc(j.actual.readAs)}, ${j.actual.records} records.<br>
-      Users: <b>${j.users.baseline}</b> in baseline · <b>${j.users.ecw}</b> in eCW · <b>${j.users.both}</b> in both. Settings: <b>${j.permissions.baseline}</b> · <b>${j.permissions.ecw}</b> · <b>${j.permissions.both}</b> in both${j.matches.length ? ` (${j.matches.length} paired by alias or name)` : ''}. Compared <b>${j.compared}</b> pairs, <b>${j.counts.ok}</b> match.</p>
+      Users: <b>${j.users.baseline}</b> in baseline · <b>${j.users.ecw}</b> in eCW · <b>${j.users.both}</b> in both. Settings: <b>${j.permissions.baseline}</b> · <b>${j.permissions.ecw}</b> · <b>${j.permissions.both}</b> in both${j.matches.length ? ` (${j.matches.length} paired by alias or name)` : ''}. Compared <b>${j.compared}</b> pairs, <b>${j.counts.ok}</b> match.${j.catalog ? `<br>Catalog “${esc(j.catalogFile.name)}”: <b>${j.catalog.total}</b> settings, <b>${j.catalog.covered}</b> covered by the baseline, <b>${j.catalog.grantedUncovered}</b> not covered but granted to someone in eCW${j.catalog.unknown.length ? `, <b>${j.catalog.unknown.length}</b> baseline name(s) eCW does not know` : ''}.` : ''}</p>
       ${warn.length ? `<div class="warn"><b>Check how the files were read:</b><ul>${warn.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}
       <div class="stats"><div class="stat high"><b>${c.high}</b><span>high</span></div><div class="stat medium"><b>${c.medium}</b><span>medium</span></div><div class="stat low"><b>${c.low}</b><span>low</span></div><div class="stat"><b>${c.info}</b><span>info</span></div><div class="stat ok"><b>${j.counts.ok}</b><span>matching</span></div>
       <div class="stat high"><b>${j.counts.excess}</b><span>excess access</span></div><div class="stat medium"><b>${j.counts.missing}</b><span>missing access</span></div><div class="stat medium"><b>${j.counts.different}</b><span>different level</span></div><div class="stat medium"><b>${j.counts['user-not-in-ecw']}</b><span>users not in eCW</span></div><div class="stat high"><b>${j.counts['user-not-in-baseline']}</b><span>users not in baseline</span></div></div>
-      <div class="tabs">${[['actions', `What to do (${j.actions.length} users)`], ['findings', `Findings (${j.findings.length})`], ['sbs', 'Side by side'], ['settings', `By setting (${j.bySetting.length})`], ['matches', `Matches (${j.matches.length})`]].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <div class="tabs">${[['actions', `What to do (${j.actions.length} users)`], ['findings', `Findings (${j.findings.length})`], ['sbs', 'Side by side'], ['settings', `By setting (${j.bySetting.length})`], ['matches', `Matches (${j.matches.length})`], ...(j.catalog ? [['coverage', `Coverage (${j.catalog.total - j.catalog.covered} uncovered)`]] : [])].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       <div id="panel"></div>`;
     for (const b of document.querySelectorAll('.tabs button')) b.addEventListener('click', () => { tab = b.dataset.tab; render(); });
-    ({ actions: panelActions, findings: panelFindings, sbs: panelSbs, settings: panelSettings, matches: panelMatches })[tab]();
+    ({ actions: panelActions, findings: panelFindings, sbs: panelSbs, settings: panelSettings, matches: panelMatches, coverage: panelCoverage })[tab]();
   }
   const roleOf = u => (last.detail.find(d => d.user === u) || {}).role || '';
 
@@ -211,7 +242,7 @@
 
   function panelFindings() {
     $('panel').innerHTML = `<div class="filters"><input type="text" id="q" placeholder="filter by user, setting or note"><label><input type="checkbox" id="hideInfo" checked> hide info</label><span class="muted" id="n"></span></div>
-      <div class="tablewrap"><table id="t"><thead><tr>${['severity', 'type', 'user', 'permission', 'expected', 'actual', 'note'].map(k => `<th class="sortable" data-k="${k}">${{ permission: 'Security setting', expected: 'Expected (baseline)', actual: 'Actual (eCW)' }[k] || k[0].toUpperCase() + k.slice(1)}${sortKey === k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody></tbody></table></div>`;
+      <div class="tablewrap"><table id="t"><thead><tr>${['severity', 'type', 'user', 'permission', ...(last.catalog ? ['group', 'description'] : []), 'expected', 'actual', 'note'].map(k => `<th class="sortable" data-k="${k}">${{ permission: 'Security setting', expected: 'Expected (baseline)', actual: 'Actual (eCW)', description: 'What it controls' }[k] || k[0].toUpperCase() + k.slice(1)}${sortKey === k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody></tbody></table></div>`;
     $('q').addEventListener('input', rows); $('hideInfo').addEventListener('change', rows);
     for (const th of document.querySelectorAll('#t th')) th.addEventListener('click', () => { const k = th.dataset.k; sortDir = sortKey === k ? -sortDir : 1; sortKey = k; panelFindings(); });
     rows();
@@ -221,7 +252,7 @@
     let list = last.findings.filter(f => !(hide && f.severity === 'info') && (!q || `${f.user} ${f.permission} ${f.note} ${f.type} ${f.expected} ${f.actual}`.toLowerCase().includes(q)));
     list = [...list].sort((a, b) => { const x = sortKey === 'severity' ? RANK[a.severity] : String(a[sortKey] || '').toLowerCase(); const y = sortKey === 'severity' ? RANK[b.severity] : String(b[sortKey] || '').toLowerCase(); return (x < y ? 1 : x > y ? -1 : 0) * (sortKey === 'severity' ? sortDir : -sortDir); });
     $('n').textContent = `${list.length} of ${last.findings.length} findings`;
-    document.querySelector('#t tbody').innerHTML = list.slice(0, 3000).map(f => `<tr><td><span class="tag ${f.severity}">${f.severity}</span></td><td>${esc(TYPE[f.type] || f.type)}</td><td><a href="#" data-user="${esc(f.user)}">${esc(f.user)}</a></td><td>${esc(f.permission)}</td><td class="mono">${esc(f.expected)}</td><td class="mono">${esc(f.actual)}</td><td class="muted">${esc(f.note)}</td></tr>`).join('') + (list.length > 3000 ? `<tr><td colspan="7" class="muted">… ${list.length - 3000} more — download the report</td></tr>` : '');
+    document.querySelector('#t tbody').innerHTML = list.slice(0, 3000).map(f => `<tr><td><span class="tag ${f.severity}">${f.severity}</span></td><td>${esc(TYPE[f.type] || f.type)}</td><td><a href="#" data-user="${esc(f.user)}">${esc(f.user)}</a></td><td>${esc(f.permission)}</td>${last.catalog ? `<td class="muted">${esc(f.group || '')}</td><td class="muted" style="max-width:320px">${esc(f.description || '')}</td>` : ''}<td class="mono">${esc(f.expected)}</td><td class="mono">${esc(f.actual)}</td><td class="muted">${esc(f.note)}</td></tr>`).join('') + (list.length > 3000 ? `<tr><td colspan="9" class="muted">… ${list.length - 3000} more — download the report</td></tr>` : '');
     for (const a of document.querySelectorAll('#t a[data-user]')) a.addEventListener('click', e => { e.preventDefault(); pickedUser = a.dataset.user; tab = 'sbs'; render(); });
   }
 
@@ -235,12 +266,24 @@
       <div class="filters" style="margin:6px 0"><label><input type="checkbox" id="onlyDiff" ${bad ? 'checked' : ''}> only differences</label></div>
       <div class="tablewrap" id="sbsT"></div></div></div>`;
     const list = () => { const q = $('uq').value.trim().toLowerCase(); $('ul').innerHTML = D.filter(x => !q || x.user.toLowerCase().includes(q)).map(x => { const n = x.settings.filter(s => s.type !== 'ok').length; const worst = x.settings.reduce((w, s) => RANK[s.severity] > RANK[w] ? s.severity : w, 'info'); return `<div class="${x.user === pickedUser ? 'on' : ''}" data-u="${esc(x.user)}"><span>${esc(x.user)}</span><small>${n ? `<span class="tag ${n && worst !== 'info' ? worst : 'info'}">${n}</span>` : '<span class="tag ok">✓</span>'}</small></div>`; }).join(''); for (const el of $('ul').querySelectorAll('[data-u]')) el.addEventListener('click', () => { pickedUser = el.dataset.u; panelSbs(); }); };
-    const table = () => { const only = $('onlyDiff').checked; const S = d.settings.filter(s => !only || s.type !== 'ok'); $('sbsT').innerHTML = `<table><thead><tr><th>Security setting</th><th>Baseline says</th><th>eCW says</th><th>Result</th></tr></thead><tbody>${S.map(s => `<tr><td>${esc(s.permission)}</td><td><span class="cell ${s.expected ? '' : 'permission-not-in-baseline'}">${esc(s.expected || '—')}</span></td><td><span class="cell ${s.actual ? '' : 'permission-not-in-ecw'}">${esc(s.actual || '—')}</span></td><td><span class="cell ${s.type}">${esc(TYPE[s.type] || s.type)}</span></td></tr>`).join('') || '<tr><td colspan="4" class="muted">no differences</td></tr>'}</tbody></table>`; };
+    const table = () => { const only = $('onlyDiff').checked; const S = d.settings.filter(s => !only || s.type !== 'ok'); $('sbsT').innerHTML = `<table><thead><tr><th>Security setting</th><th>Baseline says</th><th>eCW says</th><th>Result</th></tr></thead><tbody>${S.map(s => `<tr><td>${esc(s.permission)}${s.description ? `<div class="muted" style="font-size:12px;max-width:520px">${esc(s.description)}</div>` : ''}</td><td><span class="cell ${s.expected ? '' : 'permission-not-in-baseline'}">${esc(s.expected || '—')}</span></td><td><span class="cell ${s.actual ? '' : 'permission-not-in-ecw'}">${esc(s.actual || '—')}</span></td><td><span class="cell ${s.type}">${esc(TYPE[s.type] || s.type)}</span></td></tr>`).join('') || '<tr><td colspan="4" class="muted">no differences</td></tr>'}</tbody></table>`; };
     $('uq').addEventListener('input', list); $('onlyDiff').addEventListener('change', table); list(); table();
   }
 
   function panelSettings() {
     $('panel').innerHTML = last.bySetting.length ? `<div class="tablewrap"><table><thead><tr><th>Security setting</th><th>Excess</th><th>Missing</th><th>Different</th><th>Other</th><th>OK</th></tr></thead><tbody>${last.bySetting.map(s => `<tr><td>${esc(s.setting)}</td><td>${s.excess ? `<span class="tag high">${s.excess}</span>` : ''}</td><td>${s.missing ? `<span class="tag medium">${s.missing}</span>` : ''}</td><td>${s.different ? `<span class="tag medium">${s.different}</span>` : ''}</td><td>${s.other ? `<span class="tag low">${s.other}</span>` : ''}</td><td class="muted">${s.ok}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">No setting has a discrepancy.</p>';
+  }
+  function panelCoverage() {
+    const c = last.catalog; const P = $('panel');
+    let h = `<p class="muted" style="margin:0 0 8px">Every setting eCW knows, by group: which ones the baseline covers and how many eCW users hold each. An uncovered setting that someone holds is a decision waiting to be made — add it to the baseline as Y or N.</p>`;
+    if (c.unknown.length) h += `<div class="warn"><b>Baseline settings eCW does not know</b> (typo or renamed — fix the baseline, or add an alias):<ul>${c.unknown.map(u => `<li>${esc(u.name)}${u.suggestion ? ` → closest: <b>${esc(u.suggestion)}</b> <span class="muted">(${esc(u.group)})</span>` : ''}</li>`).join('')}</ul></div>`;
+    if (c.ecwUnknown.length) h += `<div class="warn"><b>eCW export settings not in the catalog</b> (a newer or older eCW version?): ${c.ecwUnknown.slice(0, 20).map(esc).join('; ')}${c.ecwUnknown.length > 20 ? ' …' : ''}</div>`;
+    h += `<div class="filters"><input type="text" id="cq" placeholder="filter by setting, group or description"><label><input type="checkbox" id="cUncovered" checked> only uncovered</label><label><input type="checkbox" id="cGranted"> only granted to someone</label><span class="muted" id="cn"></span></div>
+      <div class="tablewrap" style="max-height:60vh"><table><thead><tr><th>Group</th><th>Security setting</th><th>What it controls</th><th>In baseline</th><th>Granted in eCW to</th></tr></thead><tbody id="cbody"></tbody></table></div>
+      <h3 style="font-size:14px;margin:14px 0 6px">By group</h3><div class="tablewrap" style="max-height:40vh"><table><thead><tr><th>Group</th><th>Settings</th><th>Covered by baseline</th><th>Uncovered but granted</th></tr></thead><tbody>${c.byGroup.map(g => `<tr><td>${esc(g.group)}</td><td>${g.total}</td><td>${g.covered}</td><td>${g.grantedUncovered ? `<span class="tag medium">${g.grantedUncovered}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+    P.innerHTML = h;
+    const rows = () => { const q = $('cq').value.trim().toLowerCase(), unc = $('cUncovered').checked, gr = $('cGranted').checked; const L = c.settings.filter(s => (!unc || !s.inBaseline) && (!gr || s.grantedTo > 0) && (!q || `${s.name} ${s.group} ${s.description}`.toLowerCase().includes(q))).sort((a, b) => (b.grantedTo - a.grantedTo) || a.group.localeCompare(b.group) || a.name.localeCompare(b.name)); $('cn').textContent = `${L.length} of ${c.settings.length} settings`; $('cbody').innerHTML = L.slice(0, 2000).map(s => `<tr><td>${esc(s.group)}</td><td>${esc(s.name)}</td><td class="muted" style="max-width:420px">${esc(s.description)}</td><td>${s.inBaseline ? '<span class="tag ok">Y</span>' : '<span class="tag info">N</span>'}</td><td>${s.grantedTo ? `<span class="tag ${s.inBaseline ? 'info' : 'medium'}">${s.grantedTo}</span>` : ''}</td></tr>`).join(''); };
+    $('cq').addEventListener('input', rows); $('cUncovered').addEventListener('change', rows); $('cGranted').addEventListener('change', rows); rows();
   }
   function panelMatches() {
     $('panel').innerHTML = (last.matches.length ? `<p class="muted" style="margin:0 0 8px">Names that were not identical in the two documents but were paired anyway. Check they are right; if one is wrong, add an alias or rename the baseline row.</p><div class="tablewrap"><table><thead><tr><th>Kind</th><th>Baseline name</th><th>eCW name</th><th>Paired by</th></tr></thead><tbody>${last.matches.map(m => `<tr><td>${m.kind === 'user' ? 'User' : 'Setting'}</td><td>${esc(m.baseline)}</td><td>${esc(m.ecw)}</td><td class="muted">${m.by === 'alias' ? 'alias you supplied' : 'same name, different category'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Every user and setting matched by exact name (ignoring case and punctuation).</p>') +

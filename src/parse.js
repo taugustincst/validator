@@ -16,7 +16,10 @@
 export const SUBJECT_HEADERS = ['user', 'username', 'user name', 'userid', 'user id', 'login', 'login id', 'login name', 'staff', 'staff name', 'employee', 'employee name', 'provider', 'provider name', 'name', 'account', 'role', 'role name', 'security role', 'group', 'job title', 'title'];
 export const PERMISSION_HEADERS = ['permission', 'permissions', 'security setting', 'security settings', 'setting', 'settings', 'item', 'item name', 'privilege', 'right', 'rights', 'access right', 'feature', 'function', 'option', 'security item', 'security option', 'menu item', 'description'];
 export const VALUE_HEADERS = ['value', 'access', 'allowed', 'allow', 'granted', 'grant', 'permitted', 'enabled', 'status', 'setting value', 'y/n', 'yes/no', 'assigned', 'has access', 'checked', 'selected', 'level', 'access level'];
+export const DESCRIPTION_HEADERS = ['description', 'security setting description', 'setting description', 'what it controls', 'what it does', 'details', 'help', 'notes', 'comment', 'comments'];
 export const CATEGORY_HEADERS = ['category', 'module', 'section', 'group name', 'area', 'menu', 'tab', 'security group', 'setting group', 'folder'];
+
+import { detectCatalog } from './catalog.js';
 
 export const normKey = s => String(s ?? '').toLowerCase().normalize('NFKC').replace(/[‘’“”]/g, "'").replace(/[^a-z0-9]+/g, ' ').trim();
 export const clean = s => String(s ?? '').replace(/\s+/g, ' ').trim();
@@ -142,7 +145,9 @@ export function extractRecords(rows, opts = {}) {
   } else {
     const headers = (rows[lay.headerRow] || []).map(clean);
     const cols = [];
-    for (let c = lay.firstDataCol; c < headers.length; c++) if (headers[c] !== '') cols.push(c);
+    // A description / notes column beside the setting name carries text, not grants: never a user.
+    const isText = h => DESCRIPTION_HEADERS.includes(normKey(h));
+    for (let c = lay.firstDataCol; c < headers.length; c++) if (headers[c] !== '' && !isText(headers[c])) cols.push(c);
     const unnamed = headers.slice(lay.firstDataCol).filter((h, i) => h === '' && rows.slice(lay.headerRow + 1).some(r => clean(r[lay.firstDataCol + i]) !== '')).length;
     if (unnamed) warnings.push(`${where}: ${unnamed} column(s) have values but no name in the header row and were ignored`);
     let lastCat = '', headings = 0;
@@ -205,6 +210,9 @@ const looksLikeRoleMap = name => /^(user|users|role map|roles map|mapping|user r
 export function workbookToRecords(wb, opts = {}) {
   const sheets = wb.sheets || [];
   if (!sheets.length) throw new Error('the workbook has no sheets');
+  // eCW's settings catalog (name / description / type / group) has no users and no grants: say so
+  // instead of reading its Type and Group columns as two "users".
+  if (!opts.layout && !opts.subjectCol && !opts.valueCol) for (const sh of sheets) { if (opts.sheet && !/^(all|\*)$/i.test(String(opts.sheet)) && normKey(sh.name) !== normKey(opts.sheet)) continue; const c = detectCatalog(sh.rows); if (c) throw Object.assign(new Error(`sheet "${sh.name}" is eCW's security settings CATALOG (setting name, description, type, group) — it lists settings but no users or grants, so it cannot be compared. Use it as the catalog (--catalog, or the Catalog slot) and export the per-user security settings for the eCW side.`), { kind: 'catalog' }); }
   const warnings = [];
   const pick = name => { const s = sheets.find(x => normKey(x.name) === normKey(name)); if (!s) throw new Error(`sheet "${name}" not found; sheets are: ${sheets.map(x => x.name).join(', ')}`); return s; };
   let roleMap = null, roleSheet = null;

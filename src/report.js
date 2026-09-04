@@ -27,6 +27,7 @@ export function reportSheets(result, meta = {}) {
     ...Object.entries(result.counts).filter(([t]) => t !== 'ok').map(([t, n]) => [TYPE_LABEL[t] || t, n]),
     [],
     ['Settings matched by alias or name', result.matches.length],
+    ...(result.catalog ? [[], ['eCW settings catalog', meta.catalog || ''], ['Catalog settings', result.catalog.total], ['… covered by the baseline', result.catalog.covered], ['… not covered but granted to someone in eCW', result.catalog.grantedUncovered], ['Baseline settings not in the catalog', result.catalog.unknown.length], ['eCW settings not in the catalog', result.catalog.ecwUnknown.length]] : []),
     [],
     ['Sheets', ''],
     ['Actions', 'per user: what to remove, grant or review in eCW'],
@@ -34,6 +35,7 @@ export function reportSheets(result, meta = {}) {
     ['Side by side', 'every user × setting: expected vs. actual, colour-coded'],
     ['Users / Settings', 'where the discrepancies concentrate'],
     ['Matches', 'settings and users the validator paired by alias or by name rather than exactly'],
+    ...(result.catalog ? [['Coverage', 'every catalog setting: its group, what it controls, whether the baseline covers it, how many eCW users hold it'], ['Not in catalog', 'baseline (and eCW) setting names the catalog does not know — typos or renamed items, with the closest catalog name']] : []),
     [],
     ['How to read this', 'High = access eCW grants that the baseline does not (remove it, or approve it in the baseline). Medium = access the baseline requires that eCW lacks, a level mismatch, or a baseline user eCW does not list. Low/Info = coverage gaps between the two documents.'],
   ];
@@ -43,9 +45,10 @@ export function reportSheets(result, meta = {}) {
   const roleOf = new Map(result.detail.map(d => [d.user, d.role || '']));
   for (const a of result.actions) actions.push([a.user, roleOf.get(a.user) || '', a.remove.join('\n'), a.grant.join('\n'), a.review.join('\n'), a.status]);
 
+  const hasCat = !!result.catalog;
   const findings = [
-    ['Severity', 'Type', 'User', 'Security setting', 'Expected (baseline)', 'Actual (eCW)', 'Note', 'Baseline row', 'eCW row'],
-    ...result.findings.map(f => [f.severity.toUpperCase(), TYPE_LABEL[f.type] || f.type, f.user, f.permission, f.expected, f.actual, f.note, f.baselineRow ?? '', f.actualRow ?? '']),
+    ['Severity', 'Type', 'User', 'Security setting', ...(hasCat ? ['Group', 'What it controls'] : []), 'Expected (baseline)', 'Actual (eCW)', 'Note', 'Baseline row', 'eCW row'],
+    ...result.findings.map(f => [f.severity.toUpperCase(), TYPE_LABEL[f.type] || f.type, f.user, f.permission, ...(hasCat ? [f.group || '', f.description || ''] : []), f.expected, f.actual, f.note, f.baselineRow ?? '', f.actualRow ?? '']),
   ];
 
   // Side by side: settings down, users across; each cell "expected → actual" unless they agree.
@@ -68,16 +71,22 @@ export function reportSheets(result, meta = {}) {
 
   const users = [['User', 'Role (baseline)', 'High', 'Medium', 'Low', 'Info', 'Excess', 'Missing', 'Different', 'Other'], ...perUser(result).map(u => [u.user, roleOf.get(u.user) || '', u.high, u.medium, u.low, u.info, u.excess, u.missing, u.different, u.other])];
   const settings = [['Security setting', 'Excess', 'Missing', 'Different', 'Other', 'OK'], ...result.bySetting.map(s => [s.setting, s.excess, s.missing, s.different, s.other, s.ok])];
+  const coverage = hasCat ? [['Group', 'Security setting', 'What it controls', 'In baseline?', 'Granted in eCW to (users)', 'Type'], ...[...result.catalog.settings].sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name)).map(s => [s.group, s.name, s.description, s.inBaseline ? 'Y' : 'N', s.grantedTo, s.type])] : [];
+  const notInCat = hasCat ? [['Side', 'Setting name', 'Closest catalog setting', 'Its group'], ...result.catalog.unknown.map(u => ['baseline', u.name, u.suggestion, u.group]), ...result.catalog.ecwUnknown.map(n => ['eCW export', n, '', ''])] : [];
   const matches = [['Kind', 'Baseline name', 'eCW name', 'Matched by'], ...result.matches.map(m => [m.kind === 'user' ? 'User' : 'Setting', m.baseline, m.ecw, m.by === 'alias' ? 'alias you supplied' : 'same name, different category'])];
 
   return [
     { name: 'Summary', rows: summary, widths: [34, 100], freeze: false, styles: (r, c) => (r === 0 || (c === 0 && summary[r]?.length === 2 && summary[r][1] === '') ? STYLE.header : r === 1 ? (result.pass ? STYLE.green : STYLE.red) : 0) },
     { name: 'Actions', rows: actions, widths: [22, 16, 48, 48, 60, 60], autofilter: true, styles: (r, c) => (r === 0 ? STYLE.header : c === 2 && actions[r][2] ? STYLE.redWrap : c === 3 && actions[r][3] ? STYLE.amberWrap : c === 5 && actions[r][5] ? STYLE.blueWrap : c >= 2 ? STYLE.wrap : 0) },
-    { name: 'Findings', rows: findings, widths: [10, 24, 22, 48, 22, 22, 80, 12, 10], autofilter: true, styles: (r, c) => (r === 0 ? STYLE.header : c === 0 ? FILL[result.findings[r - 1].severity] : 0) },
+    { name: 'Findings', rows: findings, widths: hasCat ? [10, 24, 22, 48, 26, 60, 22, 22, 80, 12, 10] : [10, 24, 22, 48, 22, 22, 80, 12, 10], autofilter: true, styles: (r, c) => (r === 0 ? STYLE.header : c === 0 ? FILL[result.findings[r - 1].severity] : hasCat && c === 5 ? STYLE.wrap : 0) },
     { name: 'Side by side', rows: sbs, widths: [44, ...usersAll.map(() => 18)], styles: (r, c) => sbsStyle[r]?.[c] ?? 0 },
     { name: 'Users', rows: users, widths: [26, 16, 8, 8, 8, 8, 8, 8, 10, 8], autofilter: true, styles: (r, c) => (r === 0 ? STYLE.header : c === 2 && users[r][2] > 0 ? STYLE.red : c === 3 && users[r][3] > 0 ? STYLE.amber : 0) },
     { name: 'Settings', rows: settings, widths: [48, 8, 8, 10, 8, 8], autofilter: true, styles: (r, c) => (r === 0 ? STYLE.header : c === 1 && settings[r][1] > 0 ? STYLE.red : c === 2 && settings[r][2] > 0 ? STYLE.amber : 0) },
     { name: 'Matches', rows: matches, widths: [10, 48, 48, 30], autofilter: true },
+    ...(hasCat ? [
+      { name: 'Coverage', rows: coverage, widths: [30, 50, 80, 12, 16, 8], autofilter: true, styles: (r, c) => (r === 0 ? STYLE.header : c === 3 && coverage[r][3] === 'N' && coverage[r][4] > 0 ? STYLE.amber : c === 3 && coverage[r][3] === 'Y' ? STYLE.green : c === 2 ? STYLE.wrap : 0) },
+      { name: 'Not in catalog', rows: notInCat, widths: [12, 50, 50, 30], autofilter: true, styles: (r, c) => (r === 0 ? STYLE.header : c === 1 ? STYLE.amber : 0) },
+    ] : []),
   ];
 }
 
@@ -92,7 +101,8 @@ export function textSummary(result, meta = {}) {
   L.push(`  settings: ${result.permissions.baseline} in baseline, ${result.permissions.ecw} in eCW, ${result.permissions.both} in both${result.matches.length ? ` (${result.matches.length} paired by alias/name — see Matches)` : ''}`);
   L.push(`  compared ${result.compared} user/setting pairs: ${result.counts.ok} match`);
   L.push(`  findings: ${result.bySeverity.high} high, ${result.bySeverity.medium} medium, ${result.bySeverity.low} low, ${result.bySeverity.info} info`);
-  const warn = [...(meta.baselineWarnings || []).map(w => `baseline: ${w}`), ...(meta.actualWarnings || []).map(w => `eCW export: ${w}`)];
+  if (result.catalog) { const c = result.catalog; L.push(`  catalog: ${meta.catalog || 'eCW settings catalog'} — ${c.total} settings, ${c.covered} covered by the baseline, ${c.grantedUncovered} not covered but granted to someone in eCW${c.unknown.length ? `, ${c.unknown.length} baseline name(s) not in the catalog` : ''}`); }
+  const warn = [...(meta.baselineWarnings || []).map(w => `baseline: ${w}`), ...(meta.actualWarnings || []).map(w => `eCW export: ${w}`), ...(meta.catalogWarnings || []).map(w => `catalog: ${w}`)];
   if (warn.length) { L.push(''); L.push('  Check how the files were read:'); for (const w of warn) L.push(`   ! ${w}`); }
   const limit = meta.limit ?? 40;
   if (result.actions.length) {
@@ -106,6 +116,7 @@ export function textSummary(result, meta = {}) {
       for (const p of a.review) L.push(`     REVIEW  ${p}`);
     }
   }
+  if (result.catalog?.unknown.length) { L.push(''); L.push('  Baseline settings the eCW catalog does not know (typo or renamed?):'); for (const u of result.catalog.unknown.slice(0, limit)) L.push(`   ? ${u.name}${u.suggestion ? `  → closest: "${u.suggestion}" (${u.group})` : ''}`); }
   const low = result.findings.filter(f => f.severity === 'low' && f.type.startsWith('permission'));
   if (low.length) { L.push(''); L.push(`  Coverage: ${low.length} setting/user pair(s) exist on only one side (low) — see the Findings sheet.`); const names = [...new Set(low.map(f => f.permission))]; L.push(`   ${names.slice(0, 6).join(' | ')}${names.length > 6 ? ' | …' : ''}`); }
   return L.join('\n');

@@ -18,6 +18,7 @@
 // Anything still unmatched is reported with its closest candidate ("did you mean …") but is never
 // silently matched — a wrong guess would hide a real discrepancy.
 import { normKey, isGranted } from './parse.js';
+import { lookup } from './catalog.js';
 
 export const SEVERITY = { high: 3, medium: 2, low: 1, info: 0 };
 export const TYPE_LABEL = {
@@ -63,6 +64,9 @@ const aliasMap = (pairs, keyFn) => { const m = new Map(); if (!pairs) return m; 
  *   matchByName                      — match a setting by its name alone when unique (default true)
  *   reportUnknownPermissions         — include permission-not-in-baseline rows (default true)
  *   reportOk                         — include matching pairs in findings (default false; counts always include them)
+ *   catalog                          — eCW's settings catalog (see catalog.js): findings get the setting's group and
+ *                                      description, and result.catalog reports baseline names it does not know and
+ *                                      catalog settings the baseline does not cover
  * Returns { findings, detail, actions, counts, bySeverity, bySetting, users, permissions, matches, compared, pass }.
  */
 export function compare(baseline, actual, opts = {}) {
@@ -174,7 +178,28 @@ export function compare(baseline, actual, opts = {}) {
   const compared = counts.ok + counts.excess + counts.missing + counts.different;
   const result = { findings, detail, counts, bySeverity, bySetting: [...bySetting.values()].filter(s => s.excess || s.missing || s.different || s.other).sort((a, b) => (b.excess + b.missing + b.different) - (a.excess + a.missing + a.different)), users, permissions, matches, compared, pass: bySeverity.high === 0 && bySeverity.medium === 0 };
   result.actions = actions(result);
+  if (opts.catalog) enrich(result, opts.catalog, B, A);
   return result;
+}
+
+/** Attach group + description from the catalog to every finding and detail row; compute coverage. */
+function enrich(result, cat, B, A) {
+  const tag = (o, name) => { const c = lookup(cat, name); if (c) { o.group = c.group; o.description = c.description; } return c; };
+  for (const f of result.findings) if (f.permission) tag(f, f.permission);
+  for (const d of result.detail) for (const s of d.settings) tag(s, s.permission);
+  const catNames = new Map([...cat.byKey].map(([k, v]) => [k, v.name]));
+  const unknown = [];
+  for (const [pk, name] of B.perms) if (!lookup(cat, name)) { const near = closest(pk.includes(' > ') ? pk.slice(pk.lastIndexOf(' > ') + 3) : pk, catNames, 0.6); unknown.push({ name, suggestion: near?.name || '', group: near ? cat.byKey.get(near.key)?.group || '' : '' }); }
+  const ecwUnknown = [];
+  for (const [pk, name] of A.perms) if (!lookup(cat, name)) ecwUnknown.push(name);
+  // Coverage: which catalog settings the baseline says something about, and how many eCW users hold each.
+  const covered = new Set(); for (const [, name] of B.perms) { const c = lookup(cat, name); if (c) covered.add(normKey(c.name)); }
+  const grantedTo = new Map();
+  for (const u of A.users.values()) for (const r of u.perms.values()) { const c = lookup(cat, r.permission); if (c && isGranted(r.value)) { const k = normKey(c.name); grantedTo.set(k, (grantedTo.get(k) || 0) + 1); } }
+  const settings = cat.settings.map(c => ({ name: c.name, group: c.group, description: c.description, type: c.type, inBaseline: covered.has(normKey(c.name)), grantedTo: grantedTo.get(normKey(c.name)) || 0 }));
+  const byGroup = new Map();
+  for (const s of settings) { if (!byGroup.has(s.group)) byGroup.set(s.group, { group: s.group, total: 0, covered: 0, grantedUncovered: 0 }); const g = byGroup.get(s.group); g.total++; if (s.inBaseline) g.covered++; else if (s.grantedTo) g.grantedUncovered++; }
+  result.catalog = { total: cat.settings.length, covered: covered.size, unknown, ecwUnknown, settings, byGroup: [...byGroup.values()].sort((a, b) => b.total - a.total), grantedUncovered: settings.filter(s => !s.inBaseline && s.grantedTo).length };
 }
 
 /** "Y (Yes)", "N (blank)", "read only" — the normalized value, with what the cell said when that differs. */

@@ -8,13 +8,14 @@ import { fileURLToPath } from 'node:url';
 import { buildXlsx, readXlsx, parseCsv, readSpreadsheet, unzip, zip as buildZip } from '../src/xlsx.js';
 import { normalizeValue, detectLayout, extractRecords, extractRoleMap, workbookToRecords, findHeaderRow } from '../src/parse.js';
 import { compare, similarity, closest } from '../src/validate.js';
-import { validate, validateToFile, textSummary, findingsCsv, inspect, loadAliases } from '../src/index.js';
+import { validate, validateToFile, textSummary, findingsCsv, inspect, loadAliases, loadCatalog, buildTemplate } from '../src/index.js';
+import { detectCatalog, lookup } from '../src/catalog.js';
 import { serve } from '../src/server.js';
-import { writeExamples, baselineSheets, ecwExportRows, DEVIATIONS } from '../examples/make-examples.js';
+import { writeExamples, baselineSheets, ecwExportRows, catalogRows, DEVIATIONS, SETTINGS, CATALOG_EXTRA } from '../examples/make-examples.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ecw-validator-'));
-const [BASELINE, EXPORT] = writeExamples(tmp);
+const [BASELINE, EXPORT, CATALOG] = writeExamples(tmp);
 
 // ───────── spreadsheet I/O ─────────
 
@@ -112,8 +113,8 @@ test('roles: a user → role sheet expands a role-keyed baseline to users', () =
   assert.equal(x.sheet, 'Permissions');
   assert.equal(x.expanded, true);
   assert.equal(new Set(x.records.map(r => r.subject)).size, 9);
-  assert.equal(x.records.find(r => r.subject === 'hrivera' && r.permission === 'Admin > Security settings').value, 'Y');
-  assert.equal(x.records.find(r => r.subject === 'efoster' && r.permission === 'Admin > Security settings').value, 'N');
+  assert.equal(x.records.find(r => r.subject === 'hrivera' && r.permission === 'Administration / System Admin Setup > Allow Access to Patient Merge').value, 'Y');
+  assert.equal(x.records.find(r => r.subject === 'efoster' && r.permission === 'Administration / System Admin Setup > Allow Access to Patient Merge').value, 'N');
   assert.equal(x.records[0].role, 'Provider');
   assert.equal(extractRoleMap([['User', 'Role'], ['a', 'X'], ['b', '']]).size, 1);
   assert.equal(extractRoleMap([['Setting', 'u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7']]), null, 'a wide sheet is not a mapping');
@@ -178,20 +179,20 @@ test('validate: the sample pair finds every planted discrepancy and nothing else
   const v = validate(BASELINE, EXPORT);
   const r = v.result;
   assert.equal(r.pass, false);
-  assert.equal(r.users.both, 8); assert.equal(r.permissions.both, 30); assert.equal(r.compared, 240);
+  assert.equal(r.users.both, 8); assert.equal(r.permissions.both, SETTINGS.length); assert.equal(r.compared, 8 * SETTINGS.length);
   const key = f => `${f.user.toLowerCase()}|${f.permission}|${f.type}`;
   const got = new Set(r.findings.map(key));
-  const want = ['efoster|Admin > Security settings|excess', 'cnguyen|Rx > Prescribe medications|excess', 'bpatel|Progress Notes > Lock progress notes|missing', 'gkim|Billing > Post payments|missing', 'dlee|Orders > Order labs|different', 'ijones||user-not-in-ecw', 'ztemp||user-not-in-baseline'];
+  const want = [...DEVIATIONS.map(([u, p, v]) => `${u}|${p}|${v === 'Yes' ? 'excess' : v === 'No' ? 'missing' : 'different'}`), 'ijones||user-not-in-ecw', 'ztemp||user-not-in-baseline'];
   for (const w of want) assert.ok(got.has(w), `missing finding ${w}: ${[...got].join('\n')}`);
   assert.equal(r.findings.filter(f => ['excess', 'missing', 'different'].includes(f.type)).length, DEVIATIONS.length, 'no false positives');
   assert.deepEqual(r.bySeverity, { high: 3, medium: 4, low: 2, info: 6 });
-  assert.equal(r.findings.filter(f => f.type === 'permission-not-in-baseline').length, 8, 'Telehealth is reported once per eCW user');
+  assert.equal(r.findings.filter(f => f.type === 'permission-not-in-baseline').length, 8, 'Blast eMsg is reported once per eCW user');
   const text = textSummary(r, v.meta);
-  assert.match(text, /FAIL[\s\S]*3 high, 4 medium[\s\S]*What to do, per user:[\s\S]*cnguyen\n\s+REMOVE\s+Rx > Prescribe medications/);
-  assert.match(text, /gkim\n\s+GRANT\s+Billing > Post payments/);
+  assert.match(text, /FAIL[\s\S]*3 high, 4 medium[\s\S]*What to do, per user:[\s\S]*cnguyen\n\s+REMOVE\s+SureScripts > SS EPrescription/);
+  assert.match(text, /gkim\n\s+GRANT\s+Administration \/ Billing Setup > Delete Payments/);
   assert.match(text, /ijones — expected by the baseline but not in eCW/);
   assert.match(text, /Check how the files were read:[\s\S]*"view only"×1/);
-  assert.deepEqual(r.actions.find(a => a.user === 'efoster'), { user: 'efoster', remove: ['Admin > Security settings'], grant: [], review: [], status: '' });
+  assert.deepEqual(r.actions.find(a => a.user === 'efoster'), { user: 'efoster', remove: ['Administration / System Admin Setup > Allow Access to Patient Merge'], grant: [], review: [], status: '' });
   assert.equal(r.detail.find(d => d.user === 'dlee').settings.find(s => s.type === 'different').actual, 'view only');
   assert.equal(r.detail.find(d => d.user === 'ijones').inEcw, false);
   assert.equal(r.bySetting[0].setting.length > 0, true);
@@ -206,8 +207,8 @@ test('validate: report files are written in xlsx, csv and json; xlsx reads back 
   assert.deepEqual(wb.sheets.map(s => s.name), ['Summary', 'Actions', 'Findings', 'Side by side', 'Users', 'Settings', 'Matches']);
   const F = wb.sheets[2]; assert.equal(F.rows[0][0], 'Severity'); assert.equal(F.rows.length, 1 + 15);
   assert.match(wb.sheets[0].rows[1][1], /^FAIL — 3 high, 4 medium/);
-  const A = wb.sheets[1]; assert.equal(A.rows[0][2], 'Remove in eCW (excess)'); assert.ok(A.rows.some(r => r[0] === 'efoster' && r[2] === 'Admin > Security settings' && r[1] === 'Front Desk'));
-  const S = wb.sheets[3]; assert.equal(S.rows[0][0], 'Security setting'); assert.ok(S.rows[0].includes('efoster')); const ri = S.rows.findIndex(r => r[0] === 'Admin > Security settings'); const ci = S.rows[0].indexOf('efoster'); assert.equal(S.rows[ri][ci], 'N → Y (Yes)'); assert.equal(S.rows[ri][S.rows[0].indexOf('hrivera')], 'Y');
+  const A = wb.sheets[1]; assert.equal(A.rows[0][2], 'Remove in eCW (excess)'); assert.ok(A.rows.some(r => r[0] === 'efoster' && r[2] === 'Administration / System Admin Setup > Allow Access to Patient Merge' && r[1] === 'Front Desk'));
+  const S = wb.sheets[3]; assert.equal(S.rows[0][0], 'Security setting'); assert.ok(S.rows[0].includes('efoster')); const ri = S.rows.findIndex(r => r[0] === 'Administration / System Admin Setup > Allow Access to Patient Merge'); const ci = S.rows[0].indexOf('efoster'); assert.equal(S.rows[ri][ci], 'N → Y (Yes)'); assert.equal(S.rows[ri][S.rows[0].indexOf('hrivera')], 'Y');
   assert.equal(fs.readFileSync(c, 'utf8').split('\r\n').length, 17);
   assert.equal(JSON.parse(fs.readFileSync(j, 'utf8')).bySeverity.high, 3);
 });
@@ -225,12 +226,12 @@ test('cli: validate exits 1 on findings (0 with --fail-on none), inspect describ
   assert.equal(r.status, 1, r.stderr); assert.match(r.stdout, /FAIL[\s\S]*report written to/); assert.ok(fs.existsSync(out));
   r = run('validate', '--baseline', BASELINE, '--actual', EXPORT, '--fail-on', 'none', '--quiet');
   assert.equal(r.status, 0); assert.match(r.stdout, /^FAIL: 3 high, 4 medium/);
-  r = run('validate', '--baseline', BASELINE, '--actual', EXPORT, '--ignore-users', 'efoster,cnguyen,ztemp,ijones', '--ignore-settings', 'Progress Notes > Lock*,Billing > Post*,Orders > Order labs,Telehealth*', '--quiet');
+  r = run('validate', '--baseline', BASELINE, '--actual', EXPORT, '--ignore-users', 'efoster,cnguyen,ztemp,ijones', '--ignore-settings', 'Progress Notes > Lock Chart,*Delete Payments,Progress Notes > Access Patient Orders,Patient Portal > Blast eMsg', '--quiet');
   assert.equal(r.status, 0, r.stdout); assert.match(r.stdout, /^PASS/);
   r = run('validate', '--baseline', BASELINE, '--actual', EXPORT, '--json', '--fail-on', 'none');
   assert.equal(JSON.parse(r.stdout).counts.excess, 2);
   r = run('inspect', EXPORT);
-  assert.equal(r.status, 0); assert.match(r.stdout, /header on row 4[\s\S]*one row per user \+ setting[\s\S]*278 records, 9 users, 31 settings[\s\S]*first records:[\s\S]*row\s+5\s+AGARCIA/);
+  assert.equal(r.status, 0); assert.match(r.stdout, new RegExp(`header on row 4[\\s\\S]*one row per user \\+ setting[\\s\\S]*${8 * (SETTINGS.length + 1) + SETTINGS.length} records, 9 users, ${SETTINGS.length + 1} settings[\\s\\S]*first records:[\\s\\S]*row\\s+5\\s+AGARCIA`));
   r = run('validate', '--baseline', BASELINE);
   assert.equal(r.status, 2); assert.match(r.stderr, /needs --baseline <file> and --actual <file>/);
   r = run('validate', '--baseline', path.join(tmp, 'missing.xlsx'), '--actual', EXPORT);
@@ -250,12 +251,12 @@ test('server: the page is served, /api/validate returns the result, /api/report 
     const body = { baseline: { name: 'b.xlsx', data: fs.readFileSync(BASELINE).toString('base64') }, actual: { name: 'a.xlsx', data: fs.readFileSync(EXPORT).toString('base64') }, options: { ignoreUsers: 'ztemp' } };
     const post = (p, b) => fetch(u + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
     let r = await post('/api/validate', body); let j = await r.json();
-    assert.equal(r.status, 200); assert.equal(j.pass, false); assert.equal(j.bySeverity.high, 2, 'ztemp ignored'); assert.equal(j.baseline.expanded, true); assert.equal(j.actual.records, 278);
+    assert.equal(r.status, 200); assert.equal(j.pass, false); assert.equal(j.bySeverity.high, 2, 'ztemp ignored'); assert.equal(j.baseline.expanded, true); assert.equal(j.actual.records, 8 * (SETTINGS.length + 1) + SETTINGS.length);
     r = await post('/api/report', body);
     assert.equal(r.status, 200); assert.match(r.headers.get('content-disposition'), /ecw-validation-\d{4}-\d\d-\d\d\.xlsx/);
     assert.equal(readXlsx(Buffer.from(await r.arrayBuffer())).sheets.length, 7);
     r = await post('/api/inspect', { file: body.actual, label: 'actual' }); j = await r.json();
-    assert.equal(r.status, 200); assert.equal(j.records, 278); assert.equal(j.sheets[0].headerRow, 4); assert.equal(j.users.length, 9); assert.equal(j.sample[0].user, 'AGARCIA'); assert.equal(j.sheets[0].preview[3][0], 'User Name');
+    assert.equal(r.status, 200); assert.equal(j.records, 8 * (SETTINGS.length + 1) + SETTINGS.length); assert.equal(j.sheets[0].headerRow, 4); assert.equal(j.users.length, 9); assert.equal(j.sample[0].user, 'AGARCIA'); assert.equal(j.sheets[0].preview[3][0], 'User Name');
     r = await post('/api/inspect', { file: { name: 'x.csv', data: Buffer.from('one\ntwo\n').toString('base64') } }); j = await r.json();
     assert.equal(r.status, 200); assert.match(j.error, /no sheet with permission data/); assert.equal(j.sheets.length, 1, 'the raw preview is still there so the person can see why');
     r = await post('/api/validate', { ...body, aliases: { name: 'al.csv', data: Buffer.from('user,ztemp-baseline,ztemp\n').toString('base64') } }); j = await r.json();
@@ -366,7 +367,7 @@ test('roles: users whose role has no column, and columns that are not roles, are
 test('inspect: describes a file without throwing, even when it cannot be read as permissions', () => {
   const x = inspect(EXPORT, {}, 'eCW export');
   assert.equal(x.error, null); assert.equal(x.sheets[0].headerRow, 4); assert.deepEqual(x.sheets[0].headers, ['User Name', 'Category', 'Security Setting', 'Value']);
-  assert.equal(x.records, 278); assert.equal(x.users.length, 9); assert.equal(x.settings.length, 31); assert.equal(x.values[0].value, 'N');
+  assert.equal(x.records, 8 * (SETTINGS.length + 1) + SETTINGS.length); assert.equal(x.users.length, 9); assert.equal(x.settings.length, SETTINGS.length + 1); assert.equal(x.values[0].value, 'N');
   assert.equal(x.sample[0].row, 5); assert.equal(x.sample[0].raw, 'Yes');
   const b = inspect(BASELINE); assert.equal(b.expanded, true); assert.equal(b.users.find(u => u.name === 'agarcia').role, 'Provider'); assert.equal(b.sheetsUsed[0], 'Permissions');
   const bad = path.join(tmp, 'bad.csv'); fs.writeFileSync(bad, 'just\nwords\n');
@@ -375,4 +376,84 @@ test('inspect: describes a file without throwing, even when it cannot be read as
 
 test('csv: semicolon-separated (European Excel) files are read', () => {
   assert.deepEqual(parseCsv('User;Setting;Value\njdoe;A;Y\n'), [['User', 'Setting', 'Value'], ['jdoe', 'A', 'Y']]);
+});
+
+// ───────── the eCW settings catalog ─────────
+
+test('catalog: eCW\'s Security Settings export (name / description / type / group) is recognised, and refused as an eCW export', () => {
+  const rows = catalogRows();
+  const cols = detectCatalog(rows);
+  assert.deepEqual(cols, { headerRow: 0, name: 0, desc: 1, type: 2, group: 3 });
+  const cat = loadCatalog(CATALOG);
+  assert.equal(cat.settings.length, SETTINGS.length + CATALOG_EXTRA.length); assert.equal(cat.groups.size, 13);
+  assert.equal(lookup(cat, 'Delete Payments').group, 'Administration / Billing Setup');
+  assert.equal(lookup(cat, 'Administration / Billing Setup > delete payments').name, 'Delete Payments', 'the "Group > Name" form resolves by bare name');
+  assert.equal(lookup(cat, 'Nope'), null);
+  // Not catalogs: a grid with role columns, a template with blank role columns, a list with a value column
+  assert.equal(detectCatalog([['Category', 'Security Setting', 'What it controls', 'MA', 'RN'], ['Billing', 'Batches', 'x', '', ''], ['Billing', 'ERA', 'y', '', ''], ['Billing', 'ICD', 'z', '', '']]), null, 'unclaimed role columns → a permission grid');
+  assert.equal(detectCatalog([['Security Setting Name', 'Description', 'Value'], ['A', 'a', 'Y'], ['B', 'b', 'N'], ['C', 'c', 'Y']]), null, 'a value column → grants');
+  assert.throws(() => validate(BASELINE, CATALOG), /eCW export \(.*catalog\.xlsx\): sheet "Sheet1" is eCW's security settings CATALOG[\s\S]*export the per-user security settings/);
+  const x = inspect(CATALOG);
+  assert.equal(x.kind, 'catalog'); assert.equal(x.records, cat.settings.length); assert.equal(x.groups[0].group, 'Administration / Billing Setup'); assert.match(x.warnings.join(' '), /use it as the CATALOG/);
+});
+
+test('catalog: findings carry group + description, baseline typos are flagged with the real name, coverage is reported', () => {
+  const v = validate(BASELINE, EXPORT, { catalog: CATALOG });
+  const r = v.result;
+  assert.deepEqual(r.bySeverity, { high: 3, medium: 4, low: 2, info: 6 }, 'the catalog changes nothing in the comparison itself');
+  const f = r.findings.find(x => x.type === 'excess' && x.user === 'cnguyen');
+  assert.equal(f.group, 'SureScripts'); assert.match(f.description, /SureScript ePrescription/);
+  assert.equal(r.detail.find(d => d.user === 'dlee').settings.find(s => s.type === 'different').group, 'Progress Notes');
+  const c = r.catalog;
+  assert.equal(c.total, SETTINGS.length + CATALOG_EXTRA.length); assert.equal(c.covered, SETTINGS.length); assert.deepEqual(c.unknown, []); assert.deepEqual(c.ecwUnknown, []);
+  assert.equal(c.grantedUncovered, 1); assert.equal(c.settings.find(s => s.name === 'Blast eMsg').grantedTo, 2, 'the two providers hold it');
+  assert.equal(c.byGroup.find(g => g.group === 'Patient Portal').grantedUncovered, 1);
+  assert.match(textSummary(r, v.meta), /catalog: catalog\.xlsx — \d+ settings, \d+ covered by the baseline, 1 not covered but granted/);
+  // A baseline with a misspelt setting: flagged, with the closest real name and its group
+  const rec = (subject, permission, raw) => ({ subject, permission, value: normalizeValue(raw), raw, row: 0 });
+  const cat = loadCatalog(CATALOG);
+  const r2 = compare([rec('u', 'Delete Payment', 'Y'), rec('u', 'Lock Chart', 'Y')], [rec('u', 'Delete Payments', 'Yes'), rec('u', 'Lock Chart', 'Yes')], { catalog: cat });
+  assert.equal(r2.catalog.unknown.length, 1); assert.equal(r2.catalog.unknown[0].name, 'Delete Payment'); assert.equal(r2.catalog.unknown[0].suggestion, 'Delete Payments'); assert.equal(r2.catalog.unknown[0].group, 'Administration / Billing Setup');
+  assert.match(textSummary(r2, {}), /Baseline settings the eCW catalog does not know[\s\S]*\? Delete Payment  → closest: "Delete Payments"/);
+  // The report gains Coverage and Not-in-catalog sheets, and Findings gets Group / What it controls columns
+  const out = path.join(tmp, 'cat-report.xlsx'); validateToFile(BASELINE, EXPORT, out, { catalog: CATALOG });
+  const wb = readXlsx(out);
+  assert.deepEqual(wb.sheets.map(s => s.name), ['Summary', 'Actions', 'Findings', 'Side by side', 'Users', 'Settings', 'Matches', 'Coverage', 'Not in catalog']);
+  assert.deepEqual(wb.sheets[2].rows[0].slice(3, 6), ['Security setting', 'Group', 'What it controls']);
+  const cov = wb.sheets[7]; assert.equal(cov.rows.length, 1 + cat.settings.length); assert.ok(cov.rows.some(r => r[1] === 'Blast eMsg' && r[3] === 'N' && r[4] === 2));
+  assert.ok(wb.sheets[0].rows.some(r => r[0] === 'Catalog settings' && r[1] === cat.settings.length));
+});
+
+test('catalog: a baseline template is built from it and reads back as a baseline (the description column is not a user)', () => {
+  const buf = buildTemplate(CATALOG, { roles: ['MA', 'RN'], groups: ['Billing', 'Logs'] });
+  const wb = readXlsx(buf);
+  assert.deepEqual(wb.sheets.map(s => s.name), ['Permissions', 'Users', 'How to']);
+  assert.deepEqual(wb.sheets[0].rows[0], ['Category', 'Security Setting', 'What it controls', 'MA', 'RN']);
+  const n = catalogRows().slice(1).filter(r => ['Billing', 'Logs'].includes(r[3])).length; assert.equal(wb.sheets[0].rows.length, 1 + n);
+  // fill it in and read it back
+  const rows = wb.sheets[0].rows.map((r, i) => (i === 0 ? r : [...r.slice(0, 3), 'Y', 'N']));
+  const f = path.join(tmp, 'filled.xlsx'); fs.writeFileSync(f, buildXlsx([{ name: 'Permissions', rows }, { name: 'Users', rows: [['User', 'Role'], ['ma1', 'MA'], ['rn1', 'RN']] }]));
+  const x = inspect(f);
+  assert.equal(x.kind, 'permissions'); assert.equal(x.error, null); assert.deepEqual(x.users.map(u => u.name).sort(), ['ma1', 'rn1']); assert.equal(x.settings.length, n); assert.equal(x.records, 2 * n);
+  assert.equal(x.sample[0].setting.split(' > ')[0], 'Billing');
+});
+
+test('catalog: CLI --catalog and template; server /api/template and catalog in the body', async () => {
+  const run = (...a) => spawnSync(process.execPath, [path.join(root, 'bin/ecw-validate.js'), ...a], { encoding: 'utf8' });
+  let r = run('validate', '--baseline', BASELINE, '--actual', EXPORT, '--catalog', CATALOG, '--fail-on', 'none');
+  assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /catalog: .*catalog\.xlsx — \d+ settings/);
+  r = run('inspect', CATALOG); assert.equal(r.status, 0); assert.match(r.stdout, /eCW security settings catalog[\s\S]*settings in 13 groups[\s\S]*next: ecw-validate template/);
+  const t = path.join(tmp, 'tpl.xlsx'); r = run('template', '--catalog', CATALOG, '--out', t, '--roles', 'MA,RN');
+  assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /columns for MA, RN/); assert.equal(readXlsx(t).sheets[0].rows[0].length, 5);
+  r = run('validate', '--baseline', BASELINE, '--actual', CATALOG); assert.equal(r.status, 2); assert.match(r.stderr, /security settings CATALOG/);
+  const s = await serve({ port: 0 });
+  try {
+    const u = `http://127.0.0.1:${s.port}`; const b64 = f => fs.readFileSync(f).toString('base64');
+    const post = (p, b) => fetch(u + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
+    let res = await post('/api/validate', { baseline: { name: 'b.xlsx', data: b64(BASELINE) }, actual: { name: 'a.xlsx', data: b64(EXPORT) }, catalog: { name: 'c.xlsx', data: b64(CATALOG) } }); let j = await res.json();
+    assert.equal(res.status, 200); assert.equal(j.catalogFile.settings, SETTINGS.length + CATALOG_EXTRA.length); assert.equal(j.catalog.covered, SETTINGS.length); assert.equal(j.findings[0].group !== undefined, true);
+    res = await post('/api/inspect', { file: { name: 'c.xlsx', data: b64(CATALOG) } }); j = await res.json(); assert.equal(j.kind, 'catalog');
+    res = await post('/api/template', { catalog: { name: 'c.xlsx', data: b64(CATALOG) }, roles: ['X'] }); assert.equal(res.status, 200); assert.equal(readXlsx(Buffer.from(await res.arrayBuffer())).sheets[0].rows[0].length, 4);
+    res = await post('/api/template', { catalog: { name: 'b.xlsx', data: b64(BASELINE) } }); assert.equal(res.status, 400); assert.match((await res.json()).error, /no security settings catalog found/);
+  } finally { await s.close(); }
 });

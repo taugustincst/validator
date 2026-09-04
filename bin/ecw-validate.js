@@ -8,7 +8,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
-import { validateToFile, inspect, loadAliases, textSummary } from '../src/index.js';
+import { validateToFile, inspect, loadAliases, loadCatalog, buildTemplate, textSummary } from '../src/index.js';
 
 const [major] = process.versions.node.split('.').map(Number);
 if (major < 20) { process.stderr.write(`ecw-validate needs Node.js 20 or newer (this is ${process.version}). Install it from https://nodejs.org\n`); process.exit(2); }
@@ -19,6 +19,7 @@ Usage
   ecw-validate validate --baseline <file> --actual <file> [--out report.xlsx] [options]
   ecw-validate inspect <file> [--sheet NAME] [--layout long|matrix] ...
   ecw-validate serve [--port 8787] [--host 127.0.0.1] [--open]
+  ecw-validate template --catalog <file> [--out baseline-template.xlsx] [--roles a,b,c] [--groups "Billing,Progress Notes"]
   ecw-validate example [dir]
 
 Files may be .xlsx, .csv or .tsv. The baseline says what every user (or role) SHOULD have; the
@@ -33,6 +34,10 @@ Options (prefix with --baseline- or --actual- to apply to one file only, e.g. --
   --user-col NAME         column holding the user (long layout)      also --permission-col, --value-col, --category-col
   --roles-sheet NAME      user → role mapping sheet in the baseline (expands role rows to users)
   --blank-is-unknown      a blank matrix cell is "not stated" rather than "not granted"
+Catalog
+  --catalog FILE          eCW's Security Settings catalog export (setting name / description / type / group). Findings
+                          get each setting's group and what it controls; the report gains Coverage and Not-in-catalog
+                          sheets; baseline names the catalog does not know are flagged with the closest real name.
 Comparison
   --aliases FILE          .csv/.xlsx of names that differ between the documents: baseline name, eCW name
                           (optional first column "user" or "setting"); applied before comparing
@@ -82,7 +87,8 @@ async function main(argv) {
       baseline: fileOpts(args, 'baseline'), actual: fileOpts(args, 'actual'),
       compare: { ignoreUsers: args['ignore-users'], ignorePermissions: args['ignore-settings'] ?? args['ignore-permissions'], onlyUsers: args['only-users'], aliases: typeof args.aliases === 'string' ? loadAliases(args.aliases) : undefined, matchByName: !args['no-match-by-name'], reportUnknownPermissions: !args['no-unknown-settings'], reportOk: !!args['include-ok'] },
     };
-    for (const [k, f] of [['baseline', args.baseline], ['actual', args.actual]]) if (!fs.existsSync(f)) { process.stderr.write(`error: ${k} file not found: ${f}\n`); return 2; }
+    if (typeof args.catalog === 'string') opts.catalog = args.catalog;
+    for (const [k, f] of [['baseline', args.baseline], ['actual', args.actual], ['catalog', opts.catalog], ['aliases', typeof args.aliases === 'string' ? args.aliases : undefined]]) if (f && !fs.existsSync(f)) { process.stderr.write(`error: ${k} file not found: ${f}\n`); return 2; }
     const v = validateToFile(args.baseline, args.actual, out, opts);
     if (args.json) process.stdout.write(JSON.stringify({ meta: v.meta, ...v.result }, null, 2) + '\n');
     else if (args.quiet) process.stdout.write(`${v.result.pass ? 'PASS' : 'FAIL'}: ${v.result.bySeverity.high} high, ${v.result.bySeverity.medium} medium, ${v.result.bySeverity.low} low, ${v.result.bySeverity.info} info\n`);
@@ -102,6 +108,15 @@ async function main(argv) {
     w(`${file}: ${x.sheets.length} sheet(s)\n`);
     for (const s of x.sheets) w(`  • ${s.name}: ${s.rows} rows × ${s.cols} cols; header on row ${s.headerRow}: ${s.headers.slice(0, 8).map(h => JSON.stringify(h)).join(', ')}${s.headers.length > 8 ? ', …' : ''}\n`);
     if (x.error) { w(`\ncould not read permission data: ${x.error}\n`); return 1; }
+    if (x.kind === 'catalog') {
+      w(`\nread as: sheet "${x.sheet}" — ${x.readAs}\n  ${x.records} settings in ${x.groups.length} groups\n`);
+      w(`  groups: ${x.groups.slice(0, 12).map(g => `${g.group} (${g.settings})`).join(', ')}${x.groups.length > 12 ? ', …' : ''}\n`);
+      for (const m of x.warnings) w(`  ! ${m}\n`);
+      w(`\n  first settings:\n`);
+      for (const r of x.sample.slice(0, Number(args.limit) || 8)) w(`    row ${String(r.row).padStart(4)}  ${r.setting.padEnd(50)} [${r.value}]  ${String(r.raw).slice(0, 70)}\n`);
+      w(`\n  next: ecw-validate template --catalog ${file} --out baseline-template.xlsx   (a baseline to fill in)\n`);
+      return 0;
+    }
     w(`\nread as: sheet "${x.sheet}" — ${x.readAs}\n  ${x.records} records, ${x.users.length} users, ${x.settings.length} settings\n`);
     if (x.roleMap) w(`  role map: ${Object.keys(x.roleMap).length} users → ${new Set(Object.values(x.roleMap)).size} roles\n`);
     w(`  users: ${x.users.slice(0, 15).map(u => u.name + (u.role ? ` (${u.role})` : '')).join(', ')}${x.users.length > 15 ? ', …' : ''}\n`);
@@ -122,6 +137,19 @@ async function main(argv) {
     process.stdout.write(`eCW security validator: ${link}  (Ctrl-C to stop)\n`);
     if (args.open) { const { exec } = await import('node:child_process'); exec((process.platform === 'win32' ? 'start ""' : process.platform === 'darwin' ? 'open' : 'xdg-open') + ' ' + link, () => {}); }
     await new Promise(() => {});
+    return 0;
+  }
+
+  if (cmd === 'template') {
+    if (typeof args.catalog !== 'string') { process.stderr.write('template needs --catalog <eCW security settings catalog export>\n'); return 2; }
+    if (!fs.existsSync(args.catalog)) { process.stderr.write(`error: catalog file not found: ${args.catalog}\n`); return 2; }
+    const out = typeof args.out === 'string' ? args.out : 'baseline-template.xlsx';
+    const roles = typeof args.roles === 'string' ? args.roles.split(',').map(s => s.trim()).filter(Boolean) : undefined;
+    const groups = typeof args.groups === 'string' ? args.groups.split(',').map(s => s.trim()).filter(Boolean) : null;
+    const cat = loadCatalog(args.catalog);
+    fs.writeFileSync(out, buildTemplate(cat, { roles, groups }));
+    const n = groups ? cat.settings.filter(s => groups.some(g => g.toLowerCase() === s.group.toLowerCase())).length : cat.settings.length;
+    process.stdout.write(`wrote ${out}: ${n} settings${groups ? ` in ${groups.length} group(s)` : ` in ${cat.groups.size} groups`}, columns for ${(roles || ['Provider', 'Nurse', 'Front Desk', 'Biller', 'Practice Admin']).join(', ')}\nFill in Y/N per role on the Permissions sheet and the user → role list on the Users sheet, then validate with --baseline ${out} --catalog ${args.catalog}\n`);
     return 0;
   }
 

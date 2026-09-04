@@ -9,7 +9,7 @@ Plain Node.js (≥ 20), **no dependencies**: it reads and writes `.xlsx` itself.
 machine.
 
 ```
-ecw-validate validate --baseline baseline.xlsx --actual ecw-export.xlsx --out report.xlsx
+ecw-validate validate --baseline baseline.xlsx --actual ecw-export.xlsx --catalog Security_Setting.xlsx --out report.xlsx
 ```
 
 ```
@@ -20,21 +20,22 @@ eCW security settings validation — FAIL
   settings: 30 in baseline, 31 in eCW, 30 in both
   compared 240 user/setting pairs: 235 match
   findings: 3 high, 4 medium, 2 low, 6 info
+  catalog: Security_Setting.xlsx — 1147 settings, 36 covered by the baseline, 1 not covered but granted to someone in eCW
 
   Check how the files were read:
    ! eCW export: sheet "Security Settings": values other than yes/no were kept as levels and compared as text: "view only"×1
 
   What to do, per user:
    cnguyen
-     REMOVE  Rx > Prescribe medications
+     REMOVE  SureScripts > SS EPrescription
    efoster
-     REMOVE  Admin > Security settings
+     REMOVE  Administration / System Admin Setup > Allow Access to Patient Merge
    bpatel
-     GRANT   Progress Notes > Lock progress notes
+     GRANT   Progress Notes > Lock Chart
    gkim
-     GRANT   Billing > Post payments
+     GRANT   Administration / Billing Setup > Delete Payments
    dlee
-     REVIEW  Orders > Order labs: eCW has view only, baseline wants Y
+     REVIEW  Progress Notes > Access Patient Orders: eCW has view only, baseline wants Y
    ijones — expected by the baseline but not in eCW — create the user, or retire the baseline row
    ztemp — not in the baseline but holds grants in eCW — add to the baseline or remove the user
 
@@ -46,7 +47,7 @@ report written to report.xlsx
 ```bash
 git clone https://github.com/taugustincst/validator
 cd validator
-npm test                       # 28 tests, a few seconds
+npm test                       # 32 tests, a few seconds
 npm start                      # web UI at http://127.0.0.1:8787
 ```
 
@@ -72,7 +73,17 @@ otherwise use `node bin/ecw-validate.js`.
      alias or by bare name rather than exactly (so you can check them).
 4. **Download** the Excel report, the findings as CSV, or the whole result as JSON.
 
-## The two inputs
+## The inputs
+
+There are two eCW exports, and they are different things:
+
+| eCW export | Columns | What it is | Slot |
+|---|---|---|---|
+| **Security Settings catalog** (Admin → Security Settings → export) | Security Setting Name, Description, Type, Security group Name | Every setting eCW knows (~1,100 rows). **No users, no grants.** | Catalog |
+| **Per-user security settings** (Admin → Security Settings → pick users → Print/Export, or Reports → User Security Settings) | User, Category, Security Setting, Value | What each user actually has. | eCW export |
+
+The validator tells the two apart. A catalog dropped into the eCW-export slot is moved to the
+catalog slot (in the CLI, it is refused with a message saying which export to use instead).
 
 **The eCW export (what users actually have).** In eCW go to *Admin → Security Settings* (or
 *Reports → User Security Settings*), pick the users, and *Print / Export* to Excel. Save as `.xlsx`
@@ -106,6 +117,18 @@ The grid can also be the other way round (users down, settings across).
 (or `Roles`, `Mapping`, `Staff`…) with a `User` column and a `Role` column. Each role's settings are
 expanded to its users before the comparison. Users whose role has no column, and columns that are
 not roles, are pointed out.
+
+**The catalog (optional, recommended).** With `--catalog` (or the third drop zone):
+
+- every finding shows the setting's **group** and **what it controls**, from eCW's own description;
+- baseline setting names eCW does not know are flagged with the closest real name and its group
+  (`Delete Payment → closest: "Delete Payments" (Administration / Billing Setup)`);
+- a **Coverage** view lists every catalog setting with whether the baseline covers it and how many
+  eCW users hold it, so an uncovered setting that someone holds stands out as a decision to make;
+- `ecw-validate template --catalog Security_Setting.xlsx --out baseline-template.xlsx --roles "Provider,Nurse,Front Desk,Biller,Practice Admin"`
+  (or *Build baseline template* in the UI) writes a baseline to fill in: one row per catalog
+  setting with its group and description, a Y/N column per role, and a Users sheet for the
+  user → role list. `--groups "Billing,Progress Notes"` limits it to some groups.
 
 ## How names and values are matched
 
@@ -161,6 +184,9 @@ The run **passes** when there are no High or Medium findings. The CLI exits `1` 
   is coloured by outcome.
 - **Users**, **Settings** — where the discrepancies concentrate.
 - **Matches** — names paired by alias or bare name.
+- With a catalog: **Coverage** (every eCW setting, its group, what it controls, in baseline?,
+  granted to how many users) and **Not in catalog** (names eCW does not know, with the closest
+  real name), and the Findings sheet gains Group and What-it-controls columns.
 
 `--out findings.csv` or `--out result.json` write those formats instead; `--json` prints the full
 result to stdout.
@@ -200,6 +226,7 @@ ecw-validate validate --baseline <file> --actual <file> [--out report.xlsx]
     --roles-sheet NAME            user → role sheet in the baseline
     --blank-is-unknown            a blank grid cell is "not stated" rather than "not granted"
     (prefix any of the above with --baseline- or --actual- for one file only)
+    --catalog FILE                eCW's Security Settings catalog export (see above)
     --aliases FILE                names that differ between the documents (see above)
     --no-match-by-name            do not pair settings by bare name
     --ignore-users a,b*           --only-users a,b*      --ignore-settings "Labs > *"
@@ -209,6 +236,7 @@ ecw-validate validate --baseline <file> --actual <file> [--out report.xlsx]
     --fail-on high|medium|low|none   exit-code threshold (default medium)
 ecw-validate inspect <file> [reading options]   how the file is read
 ecw-validate serve [--port N] [--host H] [--open]  the web UI
+ecw-validate template --catalog FILE [--out F] [--roles a,b] [--groups g1,g2]   a baseline to fill in
 ecw-validate example [dir]                     write a sample baseline + eCW export
 ```
 
@@ -216,7 +244,8 @@ As a library:
 
 ```js
 import { validate, inspect, buildReport } from 'ecw-security-validator';
-const { result, meta } = validate('baseline.xlsx', 'ecw-export.xlsx', { compare: { ignoreUsers: 'test*' } });
+const { result, meta } = validate('baseline.xlsx', 'ecw-export.xlsx', { catalog: 'Security_Setting.xlsx', compare: { ignoreUsers: 'test*' } });
+result.catalog      // { total, covered, unknown: [{ name, suggestion, group }], settings: [{ name, group, description, inBaseline, grantedTo }], byGroup }
 result.actions      // [{ user, remove: [...], grant: [...], review: [...], status }]
 result.detail       // [{ user, inBaseline, inEcw, role, settings: [{ permission, expected, actual, type }] }]
 result.findings     // [{ severity, type, user, permission, expected, actual, note, suggestion }]
@@ -226,7 +255,7 @@ fs.writeFileSync('report.xlsx', buildReport(result, meta));
 ## Try it
 
 ```bash
-npm run examples     # writes examples/baseline.xlsx and examples/ecw-export.xlsx
+npm run examples     # writes examples/baseline.xlsx, ecw-export.xlsx and catalog.xlsx (real eCW setting names)
 npm run demo         # validates them → examples/report.xlsx (exit code 1: it has planted findings)
 ```
 
@@ -236,9 +265,10 @@ npm run demo         # validates them → examples/report.xlsx (exit code 1: it 
 bin/ecw-validate.js     CLI
 src/xlsx.js             .xlsx / .csv reader and .xlsx writer (ZIP + XML, no dependencies)
 src/parse.js            spreadsheet → permission records: header/layout detection, values, roles, warnings
+src/catalog.js          eCW's settings catalog: detection, parsing, lookup
 src/validate.js         matching (exact / alias / by name, suggestions), findings, actions, side-by-side detail
 src/report.js           Excel report, terminal summary, CSV
-src/index.js            validate(), inspect(), loadAliases()
+src/index.js            validate(), inspect(), loadAliases(), loadCatalog(), buildTemplate()
 src/server.js           local HTTP server for the web UI
 web/index.html          the web UI (single file)
 examples/               sample generator

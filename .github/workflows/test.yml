@@ -13,4 +13,4 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: npm test
-      - run: node bin/ecw-validate.js validate --baseline examples/baseline.xlsx --actual examples/ecw-export.xlsx --out report.xlsx --fail-on none
+      - run: node bin/ecw-validate.js validate --baseline examples/baseline.xlsx --actual examples/ecw-export.xlsx --catalog examples/catalog.xlsx --out report.xlsx --fail-on none

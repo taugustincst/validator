@@ -3,6 +3,8 @@
 //   POST /api/inspect      { file: {name, data(base64)}, options } → how the file is read (sheets, layout, users, settings, preview)
 //   POST /api/validate     { baseline: {name, data}, actual: {name, data}, aliases?: {name, data}, options } → JSON result
 //   POST /api/report       same body → the .xlsx report (also .csv / .json by `format`)
+//   POST /api/template     { catalog: {name, data}, roles?: [..], groups?: [..] } → a baseline template .xlsx built from the catalog
+// The optional `catalog: {name, data}` in validate/report bodies is eCW's settings catalog export.
 //   GET  /api/health
 // Files never leave the machine: the page posts them to this process on loopback, the process
 // keeps nothing on disk.
@@ -10,7 +12,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validate, inspect, loadAliases, buildReport, findingsCsv } from './index.js';
+import { validate, inspect, loadAliases, loadCatalog, buildTemplate, buildReport, findingsCsv } from './index.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PAGE = path.join(here, '..', 'web', 'index.html');
@@ -35,13 +37,14 @@ export function runFromBody(body) {
   const o = body.options || {};
   const aliases = body.aliases?.data ? loadAliases(toFile(body.aliases, 'aliases')) : (o.aliases || undefined);
   return validate(toFile(body.baseline, 'baseline'), toFile(body.actual, 'eCW export'), {
-    baseline: perFile(o.baseline), actual: perFile(o.actual),
+    baseline: perFile(o.baseline), actual: perFile(o.actual), catalog: body.catalog?.data ? toFile(body.catalog, 'catalog') : undefined,
     compare: { ignoreUsers: o.ignoreUsers || '', ignorePermissions: o.ignorePermissions || '', onlyUsers: o.onlyUsers || '', aliases, matchByName: o.matchByName !== false, reportUnknownPermissions: o.reportUnknownPermissions !== false, reportOk: !!o.reportOk },
   });
 }
 
 const view = v => ({
   meta: v.meta, ...v.result,
+  catalogFile: v.catalog ? { name: v.catalog.name, sheet: v.catalog.sheet, settings: v.catalog.settings.length, groups: v.catalog.groups.size, warnings: v.catalog.warnings } : null,
   baseline: { name: v.baseline.name, sheet: v.baseline.sheet, layout: v.baseline.layout, readAs: v.meta.baselineLayout, records: v.baseline.records.length, expanded: v.baseline.expanded, warnings: v.baseline.warnings },
   actual: { name: v.actual.name, sheet: v.actual.sheet, layout: v.actual.layout, readAs: v.meta.actualLayout, records: v.actual.records.length, warnings: v.actual.warnings },
 });
@@ -54,11 +57,12 @@ export function createServer() {
       const url = new URL(req.url, 'http://x');
       if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) return send(200, fs.readFileSync(PAGE), 'text/html; charset=utf-8', { 'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src data:" });
       if (req.method === 'GET' && url.pathname === '/api/health') return json(200, { ok: true, node: process.version });
-      if (req.method === 'POST' && ['/api/validate', '/api/report', '/api/inspect'].includes(url.pathname)) {
+      if (req.method === 'POST' && ['/api/validate', '/api/report', '/api/inspect', '/api/template'].includes(url.pathname)) {
         const ct = String(req.headers['content-type'] || '');
         if (!/application\/json/i.test(ct)) return json(415, { error: 'send application/json' });
         let body; try { body = JSON.parse((await readBody(req)).toString('utf8')); } catch (e) { return json(e.status || 400, { error: e.status ? e.message : 'invalid JSON body' }); }
         if (url.pathname === '/api/inspect') return json(200, inspect(toFile(body.file, 'file'), perFile(body.options), body.label || 'file'));
+        if (url.pathname === '/api/template') { const cat = loadCatalog(toFile(body.catalog, 'catalog')); const roles = Array.isArray(body.roles) && body.roles.length ? body.roles.map(String) : undefined; const groups = Array.isArray(body.groups) && body.groups.length ? body.groups.map(String) : null; return send(200, buildTemplate(cat, { roles, groups }), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', { 'Content-Disposition': 'attachment; filename="baseline-template.xlsx"' }); }
         const v = runFromBody(body);
         if (url.pathname === '/api/validate') return json(200, view(v));
         const fmt = String(body.format || 'xlsx');
