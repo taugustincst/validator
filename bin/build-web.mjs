@@ -24,6 +24,9 @@ const MODULES = [
   ['catalog', 'src/catalog.js'],
   ['validate', 'src/validate.js'],
   ['report', 'src/report.js'],
+  ['document', 'src/document.js'],
+  ['summary', 'src/summary.js'],
+  ['pdf', 'src/pdf.js'],
   ['index', 'src/index.js'],
   ['api', 'src/api.js'],
 ];

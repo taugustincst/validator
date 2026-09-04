@@ -83,6 +83,26 @@
   .empty { color: var(--muted); padding: 14px; }
   footer { margin-top: 36px; color: var(--muted); font-size: 12.5px; max-width: 80ch; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  /* ── the printable summary ── */
+  #printView { display: none; }
+  #printView h1 { font-size: 20px; margin: 0 0 2px; } #printView .sub { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+  #printView .meta { font-size: 12px; color: var(--muted); margin: 0 0 12px; } #printView .meta div { margin: 1px 0; }
+  #printView .v { border-left: 5px solid; padding: 8px 12px; margin: 0 0 16px; } #printView .v.pass { border-color: var(--ok); } #printView .v.fail { border-color: var(--high); }
+  #printView .v .big { font-size: 17px; font-weight: 600; margin: 0 0 2px; } #printView .v.pass .big { color: var(--ok); } #printView .v.fail .big { color: var(--high); } #printView .v p { margin: 0; font-size: 13px; }
+  #printView .role { break-inside: avoid; page-break-inside: avoid; border-top: 1px solid var(--line); padding: 8px 0 6px; }
+  #printView .role h2 { font-size: 15px; letter-spacing: 0; text-transform: none; color: var(--ink); margin: 0 0 4px; } #printView .role h2 small { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 8px; }
+  #printView h3 { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; margin: 8px 0 2px; } #printView h3.remove { color: var(--high); } #printView h3.grant { color: var(--med); } #printView h3.review { color: var(--low); }
+  #printView ul { margin: 0 0 4px 18px; padding: 0; font-size: 13px; } #printView li { margin: 2px 0; } #printView li .d { color: var(--muted); font-size: 11.5px; }
+  #printView .stat { color: var(--muted); font-size: 12px; margin: 0 0 4px; }
+  #printView .matched { border-top: 1px solid var(--line); padding-top: 8px; font-size: 12.5px; } #printView .matched b { color: var(--ok); }
+  #printView .foot { color: var(--muted); font-size: 11px; margin-top: 14px; }
+  @media print {
+    body { background: #fff; color: #000; font-size: 12px; }
+    header, main > :not(#printView) { display: none !important; }
+    main { max-width: none; padding: 0; }
+    #printView { display: block !important; }
+    @page { margin: 18mm 16mm; }
+  }
 </style>
 <header>
   <p class="eyebrow">eClinicalWorks · role permissions audit</p>
@@ -158,12 +178,15 @@
     <button id="doc" disabled title="One workbook of what eCW grants today: settings down, roles across, with each setting's description. Needs only the eCW exports.">Document eCW settings (.xlsx)</button>
     <span class="muted" id="status"></span>
     <span style="flex:1"></span>
+    <button id="prt" disabled title="A printable summary of the role differences — the browser's Print dialog can save it as PDF">Print summary</button>
+    <button id="dlP" disabled class="sm" title="The same summary as a PDF file">PDF</button>
     <button id="dlX" disabled>Excel report</button>
     <button id="dlC" disabled class="sm">CSV</button>
     <button id="dlJ" disabled class="sm">JSON</button>
   </div>
 
   <div id="out"></div>
+  <section id="printView" hidden></section>
   <footer><b>Has but shouldn't</b> = eCW grants it, the matrix does not (remove it in eCW, or approve it in the matrix). <b>Should have but doesn't</b> = the matrix grants it, eCW does not. <b>Review</b> = a level mismatch, or a setting the matrix does not mention.</footer>
 </main>
 <script>
@@ -175,8 +198,10 @@ const __url = { fileURLToPath: u => String(u) };
 // little-endian integer reads/writes, utf8/base64 conversion, alloc/concat/from/isBuffer.
 const enc = new TextEncoder(), dec = new TextDecoder('utf-8');
 class Buffer extends Uint8Array {
+  static byteLength(v, encoding) { if (typeof v !== 'string') return v.byteLength ?? v.length; return encoding === 'latin1' || encoding === 'binary' ? v.length : enc.encode(v).length; }
   static from(v, encoding) {
     if (typeof v === 'string') {
+      if (encoding === 'latin1' || encoding === 'binary') { const b = new Buffer(v.length); for (let i = 0; i < v.length; i++) b[i] = v.charCodeAt(i) & 0xff; return b; }
       if (encoding === 'base64') { const bin = atob(v.replace(/[^A-Za-z0-9+/=]/g, '')); const b = new Buffer(bin.length); for (let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); return b; }
       const u = enc.encode(v); const b = new Buffer(u.length); b.set(u); return b;
     }
@@ -197,7 +222,7 @@ class Buffer extends Uint8Array {
   writeUInt32LE(v, o) { this[o] = v & 0xff; this[o + 1] = (v >>> 8) & 0xff; this[o + 2] = (v >>> 16) & 0xff; this[o + 3] = (v >>> 24) & 0xff; return o + 4; }
   toString(encoding = 'utf8', s = 0, e = this.length) {
     const part = super.subarray(s, e);
-    if (encoding === 'base64') { let bin = ''; for (let i = 0; i < part.length; i += 0x8000) bin += String.fromCharCode.apply(null, part.subarray(i, i + 0x8000)); return btoa(bin); }
+    if (encoding === 'base64' || encoding === 'latin1' || encoding === 'binary') { let bin = ''; for (let i = 0; i < part.length; i += 0x8000) bin += String.fromCharCode.apply(null, part.subarray(i, i + 0x8000)); return encoding === 'base64' ? btoa(bin) : bin; }
     return dec.decode(part);
   }
 }
@@ -1452,9 +1477,244 @@ const __exports = { TYPE_LABEL, reportSheets, buildReport, textSummary, findings
 return __exports;
 })();
 
+M.document = (() => {
+let buildXlsx, STYLE, normKey, isGranted, lookup;
+const __link = () => { if (M.xlsx) { buildXlsx = M.xlsx.buildXlsx; STYLE = M.xlsx.STYLE; } if (M.parse) { normKey = M.parse.normKey; isGranted = M.parse.isGranted; } if (M.catalog) { lookup = M.catalog.lookup; } }; __links.push(__link); __link();
+
+// Documenting what eCW has: the per-role exports turned into one inventory workbook, with no
+// baseline involved — settings down, roles across, X where the role holds the setting, plus the
+// group and eCW's own description of each setting (from the exports, or the catalog when given).
+//
+//   eCW matrix   Group | Security setting | What it controls | <one column per role> | Roles holding it
+//   Roles        role, source file, settings held, of how many
+//   Settings     one row per setting with the roles that hold it, spelled out
+//   Source       when, which files, how each was read, notes
+
+/** Build the inventory sheets from eCW records (subject = role). `actual` is what validate() loaded for the eCW side. */
+function documentSheets(actual, { catalog = null, when = new Date().toISOString() } = {}) {
+  const records = actual.records || [];
+  const roles = [];   // in file order
+  const roleKey = new Map();
+  for (const r of records) { const k = normKey(r.subject); if (!roleKey.has(k)) { roleKey.set(k, r.subject); roles.push(r.subject); } }
+  // settings: union of the exports (and the catalog), keyed by bare name
+  const settings = new Map();   // key → { name, group, description, held: Map(roleKey → value) }
+  const keyOf = perm => { const c = lookup(catalog, perm); if (c) return normKey(c.name); const i = String(perm).indexOf('>'); return normKey(i >= 0 ? String(perm).slice(i + 1) : perm); };
+  const nameOf = perm => { const c = lookup(catalog, perm); if (c) return c.name; const i = String(perm).indexOf('>'); return (i >= 0 ? String(perm).slice(i + 1) : String(perm)).trim(); };
+  const groupOf = perm => { const c = lookup(catalog, perm); if (c) return c.group; const i = String(perm).indexOf('>'); return i >= 0 ? String(perm).slice(0, i).trim() : ''; };
+  if (catalog) for (const c of catalog.settings) settings.set(normKey(c.name), { name: c.name, group: c.group, description: c.description, held: new Map(), inCatalog: true });
+  for (const r of records) {
+    const k = keyOf(r.permission);
+    if (!settings.has(k)) settings.set(k, { name: nameOf(r.permission), group: groupOf(r.permission), description: r.description || lookup(catalog, r.permission)?.description || '', held: new Map(), inCatalog: !!lookup(catalog, r.permission) });
+    const s = settings.get(k);
+    if (!s.description && r.description) s.description = r.description;
+    s.held.set(normKey(r.subject), r.value);
+  }
+  const list = [...settings.values()].sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
+  const rk = roles.map(normKey);
+  const cell = v => v === undefined ? '' : v === 'Y' ? 'X' : v === 'N' ? '' : v;   // a level ("read only") is written as is
+  const matrix = [['Group', 'Security setting', 'What it controls', ...roles, 'Roles holding it', ...(catalog ? ['In catalog'] : [])]];
+  const style = [];
+  for (const s of list) {
+    const held = rk.filter(k => isGranted(s.held.get(k) ?? 'N')).length;
+    matrix.push([s.group, s.name, s.description, ...rk.map(k => cell(s.held.get(k))), held, ...(catalog ? [s.inCatalog ? 'Y' : 'N'] : [])]);
+    style.push(rk.map(k => { const v = s.held.get(k); return v === undefined ? 0 : isGranted(v) ? STYLE.green : 0; }));
+  }
+  const rolesSheet = [['Role', 'Source file', 'Settings held', 'Of settings listed', 'How it was read'], ...roles.map((role, i) => { const k = rk[i]; const listed = records.filter(r => normKey(r.subject) === k); const f = (actual.files || []).find(f => normKey(f.role) === k); return [role, f ? f.name : (actual.name || ''), listed.filter(r => isGranted(r.value)).length, listed.length, f ? f.readAs : (actual.readAs || '')]; })];
+  const settingsSheet = [['Group', 'Security setting', 'What it controls', 'Held by', 'Roles'], ...list.map(s => { const who = roles.filter((_, i) => isGranted(s.held.get(rk[i]) ?? 'N')); return [s.group, s.name, s.description, who.length, who.join(', ')]; })];
+  const source = [['eCW security settings — documented from eCW\'s exports', ''], ['Documented at', when], ['Roles', roles.length], ['Settings', list.length], ['Catalog', catalog ? `${catalog.name ? catalog.name.replace(/^.*[\\/]/, '') : 'catalog'} (${catalog.settings.length} settings)` : 'none — groups and descriptions come from the exports'], [],
+    ['How to read this', 'The eCW matrix sheet is what eCW grants today, in the same shape as a master matrix: settings down, roles across, X where the role holds the setting. Compare it with your master matrix, or adopt it as the new master after review.'], [],
+    ['Files', ''], ...(actual.files || [{ name: actual.name, role: '', records: records.length, readAs: actual.readAs }]).map(f => [f.name, `${f.role ? `role "${f.role}" — ` : ''}${f.records} records, ${f.readAs}`]), [],
+    ...(actual.warnings?.length ? [['Notes', ''], ...actual.warnings.map(w => ['', w])] : [])];
+  return [
+    { name: 'eCW matrix', rows: matrix, widths: [28, 46, 60, ...roles.map(() => 12), 10, ...(catalog ? [8] : [])], autofilter: true, styles: (r, c) => (r === 0 ? STYLE.header : c === 2 ? STYLE.wrap : c >= 3 && c < 3 + roles.length ? style[r - 1][c - 3] : 0) },
+    { name: 'Roles', rows: rolesSheet, widths: [30, 36, 12, 14, 50], autofilter: true },
+    { name: 'Settings', rows: settingsSheet, widths: [28, 46, 60, 8, 80], autofilter: true, styles: (r, c) => (r === 0 ? STYLE.header : c === 2 || c === 4 ? STYLE.wrap : 0) },
+    { name: 'Source', rows: source, widths: [30, 100], freeze: false, styles: (r, c) => (r === 0 || (c === 0 && source[r]?.length === 2 && source[r][1] === '') ? STYLE.header : c === 1 ? STYLE.wrap : 0) },
+  ];
+}
+
+const buildEcwDocument = (actual, opts) => buildXlsx(documentSheets(actual, opts));
+
+const __exports = { documentSheets, buildEcwDocument }; 
+return __exports;
+})();
+
+M.summary = (() => {
+let TYPE_LABEL;
+const __link = () => { if (M.validate) { TYPE_LABEL = M.validate.TYPE_LABEL; } }; __links.push(__link); __link();
+
+// The one-page-per-role summary of differences, as data: the print view and the PDF both render it.
+//   { title, subtitle, meta: [[label, value]], verdict: { pass, headline, detail }, roles: [{ name, mappedFrom,
+//     status, groups: [{ kind: 'remove'|'grant'|'review', heading, items: [{ text, detail }] }] }], footer }
+
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+function summaryDoc(result, meta = {}) {
+  const toFix = result.actions.filter(a => a.remove.length || a.grant.length);
+  const removeN = result.actions.reduce((n, a) => n + a.remove.length, 0);
+  const grantN = result.actions.reduce((n, a) => n + a.grant.length, 0);
+  const reviewN = result.actions.reduce((n, a) => n + a.review.length, 0);
+  const missingRoles = result.actions.filter(a => a.status);
+  const clean = result.detail.filter(d => d.inBaseline && d.inEcw && !result.actions.some(a => a.user === d.user)).length;
+  const needs = toFix.length + missingRoles.filter(a => !toFix.includes(a)).length;
+  const headline = result.pass ? 'eCW matches the matrix' : `${plural(needs, 'role')} need${needs === 1 ? 's' : ''} attention`;
+  const detail = result.pass
+    ? `${plural(result.users.both, 'role')} compared, ${result.compared} settings checked, nothing to change.${reviewN ? ` ${plural(reviewN, 'item')} to review.` : ''}`
+    : [removeN ? `remove ${plural(removeN, 'permission')}` : '', grantN ? `grant ${plural(grantN, 'permission')}` : '', reviewN ? `review ${plural(reviewN, 'item')}` : ''].filter(Boolean).join(', ') + (clean ? `. ${plural(clean, 'role')} ${clean === 1 ? 'matches' : 'match'} the matrix exactly.` : '.');
+  const desc = (user, perm) => (result.detail.find(d => d.user === user)?.settings.find(s => s.permission === perm) || {}).description || '';
+  const roles = result.actions.map(a => ({
+    name: a.user,
+    mappedFrom: result.detail.find(d => d.user === a.user)?.role || '',
+    status: a.status,
+    groups: [
+      a.remove.length ? { kind: 'remove', heading: `Remove in eCW — has but shouldn't (${a.remove.length})`, items: a.remove.map(p => ({ text: p, detail: desc(a.user, p) })) } : null,
+      a.grant.length ? { kind: 'grant', heading: `Grant in eCW — should have but doesn't (${a.grant.length})`, items: a.grant.map(p => ({ text: p, detail: desc(a.user, p) })) } : null,
+      a.review.length ? { kind: 'review', heading: `Review (${a.review.length})`, items: a.review.map(p => ({ text: p, detail: '' })) } : null,
+    ].filter(Boolean),
+  }));
+  const matched = result.detail.filter(d => d.inBaseline && d.inEcw && !result.actions.some(a => a.user === d.user)).map(d => d.user);
+  return {
+    title: 'eCW security settings — role differences',
+    subtitle: `${meta.baseline ? `Matrix: ${meta.baseline}` : ''}${meta.actual ? `   ·   eCW: ${meta.actual}` : ''}`.trim(),
+    meta: [
+      ['Run', (meta.when || new Date().toISOString()).replace('T', ' ').slice(0, 16)],
+      ['Roles', `${result.users.baseline} in the matrix, ${result.users.ecw} in eCW, ${result.users.both} in both`],
+      ['Settings', `${result.permissions.baseline} in the matrix, ${result.permissions.ecw} in eCW; ${result.compared} role/setting pairs compared, ${result.counts.ok} match`],
+      ...(result.catalog ? [['Catalog', `${result.catalog.covered} of ${result.catalog.total} eCW settings covered by the matrix`]] : []),
+    ],
+    verdict: { pass: result.pass, headline, detail },
+    roles,
+    matched,
+    footer: "Has but shouldn't = eCW grants it, the matrix does not. Should have but doesn't = the matrix grants it, eCW does not. Review = a level mismatch, or a setting the matrix does not mention.",
+    counts: { high: result.bySeverity.high, medium: result.bySeverity.medium, low: result.bySeverity.low },
+    labels: TYPE_LABEL,
+  };
+}
+
+const __exports = { summaryDoc }; 
+return __exports;
+})();
+
+M.pdf = (() => {
+let summaryDoc;
+const __link = () => { if (M.summary) { summaryDoc = M.summary.summaryDoc; } }; __links.push(__link); __link();
+
+// A small PDF writer (text only, Helvetica, US Letter, multi-page) and the role-differences summary
+// laid out with it. No libraries: the file is plain PDF 1.4 with uncompressed content streams,
+// which every viewer opens. Text is WinAnsi; characters outside it are approximated.
+
+// Helvetica advance widths for WinAnsi 32..255 (per 1000 em), from the Adobe AFM.
+const W = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584,350,556,350,222,556,333,1000,556,556,333,1000,667,333,1000,350,611,350,350,222,222,333,333,350,556,1000,333,1000,500,333,944,350,500,667,278,333,556,556,556,556,260,556,333,737,370,556,584,333,737,333,400,584,333,333,333,556,537,278,333,333,365,556,834,834,834,611,667,667,667,667,667,667,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,556,556,556,556,556,556,889,500,556,556,556,556,278,278,278,278,556,556,556,556,556,556,556,584,611,556,556,556,556,500,556,500];
+const WB = W.map(w => Math.round(w * 1.06));   // Helvetica-Bold is a little wider; close enough for wrapping
+const WINANSI = { '–': 150, '—': 151, '‘': 145, '’': 146, '“': 147, '”': 148, '•': 149, '…': 133, '€': 128, '™': 153 };
+const codeOf = ch => { const c = ch.charCodeAt(0); if (c < 128) return c; if (WINANSI[ch]) return WINANSI[ch]; if (c >= 160 && c <= 255) return c; if (ch === '→' || ch === '➔') return 62; if (ch === '✓' || ch === '✔') return 42; if (ch === '×') return 120; return 63; };
+const width = (s, size, bold) => { let w = 0; for (const ch of s) { const c = codeOf(ch); w += (bold ? WB : W)[c - 32] ?? 556; } return w * size / 1000; };
+const pdfString = s => { let out = ''; for (const ch of s) { const c = codeOf(ch); if (c === 40 || c === 41 || c === 92) out += '\\' + String.fromCharCode(c); else if (c < 32 || c > 126) out += '\\' + c.toString(8).padStart(3, '0'); else out += String.fromCharCode(c); } return `(${out})`; };
+
+/** Wrap text to a width, breaking on spaces (a single over-long word is cut). */
+function wrap(text, size, bold, maxW) {
+  const words = String(text).split(/\s+/).filter(Boolean); const lines = []; let cur = '';
+  for (const w of words) {
+    const t = cur ? cur + ' ' + w : w;
+    if (width(t, size, bold) <= maxW) { cur = t; continue; }
+    if (cur) lines.push(cur);
+    if (width(w, size, bold) <= maxW) cur = w; else { let piece = ''; for (const ch of w) { if (width(piece + ch, size, bold) > maxW) { lines.push(piece); piece = ch; } else piece += ch; } cur = piece; }
+  }
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [''];
+}
+
+/** Page layout engine: call text()/rule()/space(); pages break themselves. Colours are [r,g,b] 0..1. */
+class Doc {
+  constructor({ pageW = 612, pageH = 792, margin = 54 } = {}) { this.pageW = pageW; this.pageH = pageH; this.m = margin; this.pages = []; this.newPage(); }
+  newPage() { this.ops = []; this.pages.push(this.ops); this.y = this.pageH - this.m; }
+  ensure(h) { if (this.y - h < this.m + 24) this.newPage(); }
+  text(str, { size = 10, bold = false, color = [0, 0, 0], indent = 0, maxW, lineGap = 1.25, keepWith = 0 } = {}) {
+    const x = this.m + indent; const mw = maxW ?? (this.pageW - this.m - x);
+    const lines = wrap(str, size, bold, mw); const lh = size * lineGap;
+    this.ensure(lh * lines.length + keepWith);
+    for (const line of lines) { this.y -= lh; this.ops.push(`BT /${bold ? 'F2' : 'F1'} ${size} Tf ${color.map(c => c.toFixed(3)).join(' ')} rg ${x.toFixed(1)} ${this.y.toFixed(1)} Td ${pdfString(line)} Tj ET`); }
+    return lines.length;
+  }
+  rule(color = [0.85, 0.87, 0.89], w = 0.6) { this.ensure(8); this.y -= 4; this.ops.push(`${color.map(c => c.toFixed(3)).join(' ')} RG ${w} w ${this.m} ${this.y.toFixed(1)} m ${this.pageW - this.m} ${this.y.toFixed(1)} l S`); this.y -= 4; }
+  box(h, color) { this.ensure(h); this.y -= h; this.ops.push(`${color.map(c => c.toFixed(3)).join(' ')} rg ${this.m} ${this.y.toFixed(1)} ${this.pageW - 2 * this.m} ${h} re f`); return this.y; }
+  bar(color, h) { this.ops.push(`${color.map(c => c.toFixed(3)).join(' ')} rg ${this.m} ${this.y.toFixed(1)} 4 ${h} re f`); }
+  space(h) { this.y -= h; }
+  build(footer = '') {
+    const objs = [];
+    const add = s => { objs.push(s); return objs.length; };
+    const fontN = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+    const fontB = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+    const pagesId = objs.length + 1 + this.pages.length * 2;   // reserve: each page = content + page object, then the Pages node
+    const pageIds = [];
+    this.pages.forEach((ops, i) => {
+      const foot = `BT /F1 8 Tf 0.45 0.5 0.55 rg ${this.m} ${(this.m - 24).toFixed(1)} Td ${pdfString(footer)} Tj ET BT /F1 8 Tf 0.45 0.5 0.55 rg ${(this.pageW - this.m - width(`Page ${i + 1} of ${this.pages.length}`, 8, false)).toFixed(1)} ${(this.m - 24).toFixed(1)} Td ${pdfString(`Page ${i + 1} of ${this.pages.length}`)} Tj ET`;
+      const stream = ops.join('\n') + '\n' + foot;
+      const bytes = Buffer.byteLength(stream, 'latin1');
+      const cid = add(`<< /Length ${bytes} >>\nstream\n${stream}\nendstream`);
+      pageIds.push(add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${this.pageW} ${this.pageH}] /Resources << /Font << /F1 ${fontN} 0 R /F2 ${fontB} 0 R >> >> /Contents ${cid} 0 R >>`));
+    });
+    const pid = add(`<< /Type /Pages /Kids [${pageIds.map(i => i + ' 0 R').join(' ')}] /Count ${pageIds.length} >>`);
+    if (pid !== pagesId) throw new Error('pdf: object numbering drifted');
+    const cat = add(`<< /Type /Catalog /Pages ${pid} 0 R >>`);
+    let out = '%PDF-1.4\n%âãÏÓ\n'; const offsets = [];
+    objs.forEach((o, i) => { offsets.push(Buffer.byteLength(out, 'latin1')); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+    const xref = Buffer.byteLength(out, 'latin1');
+    out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offsets.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('') + `trailer\n<< /Size ${objs.length + 1} /Root ${cat} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+    return Buffer.from(out, 'latin1');
+  }
+}
+
+const INK = [0.106, 0.141, 0.188], MUTED = [0.373, 0.424, 0.467], RED = [0.702, 0.149, 0.118], AMBER = [0.541, 0.353, 0], BLUE = [0.169, 0.373, 0.549], GREEN = [0.118, 0.482, 0.271];
+
+/** The role-differences summary as a PDF (Buffer). */
+function buildSummaryPdf(result, meta = {}) {
+  const S = summaryDoc(result, meta);
+  const d = new Doc();
+  d.text(S.title, { size: 17, bold: true, color: INK });
+  if (S.subtitle) d.text(S.subtitle, { size: 9, color: MUTED });
+  d.space(6);
+  for (const [k, v] of S.meta) { d.text(`${k}: ${v}`, { size: 9, color: MUTED }); }
+  d.space(8);
+  // verdict block
+  const vcol = S.verdict.pass ? GREEN : RED;
+  const dl = wrap(S.verdict.detail, 10, false, d.pageW - 2 * d.m - 14).length;
+  const h = 14 + 16 + dl * 12.5 + 6;
+  d.ensure(h);
+  const top = d.y; d.y -= 0; d.ops.push(`${vcol.map(c => c.toFixed(3)).join(' ')} rg ${d.m} ${(top - h).toFixed(1)} 4 ${h} re f`);
+  d.space(4);
+  d.text(S.verdict.headline, { size: 14, bold: true, color: vcol, indent: 12 });
+  d.text(S.verdict.detail, { size: 10, color: INK, indent: 12 });
+  d.y = top - h; d.space(10);
+  // per role
+  if (!S.roles.length) d.text('Nothing to change: every role matches the matrix.', { size: 11, color: GREEN });
+  for (const r of S.roles) {
+    d.rule();
+    d.text(r.name + (r.mappedFrom ? `   (${r.mappedFrom})` : ''), { size: 12, bold: true, color: INK, keepWith: 30 });
+    if (r.status) d.text(r.status, { size: 9.5, color: MUTED, indent: 0 });
+    for (const g of r.groups) {
+      const col = g.kind === 'remove' ? RED : g.kind === 'grant' ? AMBER : BLUE;
+      d.space(3);
+      d.text(g.heading.toUpperCase(), { size: 8.5, bold: true, color: col, keepWith: 14 });
+      for (const it of g.items) {
+        d.text('• ' + it.text, { size: 10, color: INK, indent: 8 });
+        if (it.detail) d.text(it.detail, { size: 8.5, color: MUTED, indent: 18 });
+      }
+    }
+    d.space(6);
+  }
+  if (S.matched.length) { d.rule(); d.text(`Roles that match the matrix exactly (${S.matched.length})`, { size: 10, bold: true, color: GREEN, keepWith: 14 }); d.text(S.matched.join(', '), { size: 9.5, color: INK }); }
+  d.space(8); d.text(S.footer, { size: 8, color: MUTED });
+  return d.build('eCW Security Validator');
+}
+
+const __exports = { buildSummaryPdf }; 
+return __exports;
+})();
+
 M.index = (() => {
-let readSpreadsheet, buildXlsx, STYLE, workbookToRecords, extractRecords, extractRoleMap, findHeaderRow, clean, normKey, lookup, bareName, workbookToCatalog, detectCatalog, detectCatalogLike, extractCatalog, roleNameFromSheet, closest, compare, perUser, actions, similarity, SEVERITY, TYPE_LABEL, buildReport, textSummary, findingsCsv, reportSheets, documentSheets, buildEcwDocument;
-const __link = () => { if (M.xlsx) { readSpreadsheet = M.xlsx.readSpreadsheet; buildXlsx = M.xlsx.buildXlsx; STYLE = M.xlsx.STYLE; } if (M.parse) { workbookToRecords = M.parse.workbookToRecords; extractRecords = M.parse.extractRecords; extractRoleMap = M.parse.extractRoleMap; findHeaderRow = M.parse.findHeaderRow; clean = M.parse.clean; normKey = M.parse.normKey; } if (M.catalog) { lookup = M.catalog.lookup; bareName = M.catalog.bareName; workbookToCatalog = M.catalog.workbookToCatalog; detectCatalog = M.catalog.detectCatalog; detectCatalogLike = M.catalog.detectCatalogLike; extractCatalog = M.catalog.extractCatalog; roleNameFromSheet = M.catalog.roleNameFromSheet; } if (M.validate) { closest = M.validate.closest; compare = M.validate.compare; perUser = M.validate.perUser; actions = M.validate.actions; similarity = M.validate.similarity; closest = M.validate.closest; SEVERITY = M.validate.SEVERITY; TYPE_LABEL = M.validate.TYPE_LABEL; } if (M.report) { buildReport = M.report.buildReport; textSummary = M.report.textSummary; findingsCsv = M.report.findingsCsv; reportSheets = M.report.reportSheets; } if (M.document) { documentSheets = M.document.documentSheets; buildEcwDocument = M.document.buildEcwDocument; } }; __links.push(__link); __link();
+let readSpreadsheet, buildXlsx, STYLE, workbookToRecords, extractRecords, extractRoleMap, findHeaderRow, clean, normKey, lookup, bareName, workbookToCatalog, detectCatalog, detectCatalogLike, extractCatalog, roleNameFromSheet, closest, compare, perUser, actions, similarity, SEVERITY, TYPE_LABEL, buildReport, textSummary, findingsCsv, reportSheets, documentSheets, buildEcwDocument, buildSummaryPdf, summaryDoc;
+const __link = () => { if (M.xlsx) { readSpreadsheet = M.xlsx.readSpreadsheet; buildXlsx = M.xlsx.buildXlsx; STYLE = M.xlsx.STYLE; } if (M.parse) { workbookToRecords = M.parse.workbookToRecords; extractRecords = M.parse.extractRecords; extractRoleMap = M.parse.extractRoleMap; findHeaderRow = M.parse.findHeaderRow; clean = M.parse.clean; normKey = M.parse.normKey; } if (M.catalog) { lookup = M.catalog.lookup; bareName = M.catalog.bareName; workbookToCatalog = M.catalog.workbookToCatalog; detectCatalog = M.catalog.detectCatalog; detectCatalogLike = M.catalog.detectCatalogLike; extractCatalog = M.catalog.extractCatalog; roleNameFromSheet = M.catalog.roleNameFromSheet; } if (M.validate) { closest = M.validate.closest; compare = M.validate.compare; perUser = M.validate.perUser; actions = M.validate.actions; similarity = M.validate.similarity; closest = M.validate.closest; SEVERITY = M.validate.SEVERITY; TYPE_LABEL = M.validate.TYPE_LABEL; } if (M.report) { buildReport = M.report.buildReport; textSummary = M.report.textSummary; findingsCsv = M.report.findingsCsv; reportSheets = M.report.reportSheets; } if (M.document) { documentSheets = M.document.documentSheets; buildEcwDocument = M.document.buildEcwDocument; } if (M.pdf) { buildSummaryPdf = M.pdf.buildSummaryPdf; } if (M.summary) { summaryDoc = M.summary.summaryDoc; } }; __links.push(__link); __link();
 const fs = __fs;
 const path = __path;
 // Library entry point: one call from two files (or buffers) to a result + report, and `inspect`
@@ -1554,7 +1814,7 @@ function loadCatalog(src) {
   try { return { name: nameOf(src, 'catalog'), ...workbookToCatalog(wb) }; } catch (e) { throw new Error(`catalog (${nameOf(src, 'catalog')}): ${e.message}`); }
 }
 
-const describeLayout = x => x.layout.layout === 'role-list' ? `eCW per-role export for "${x.role}"${x.layout.valueCol >= 0 ? ' (Permission column)' : ' (listed = granted)'}` : x.layout.layout === 'multi' ? `${x.files?.length || 0} files${x.kind === 'role-list' ? ', one eCW per-role export each' : ''}` : x.layout.layout === 'long' ? 'one row per user + setting' : `grid, ${x.layout.orientation === 'permissions-down' ? 'settings down / users across' : 'users down / settings across'}${x.expanded ? '; roles expanded to users' : ''}`;
+const describeLayout = x => x.layout.layout === 'role-list' ? `eCW per-role export for "${x.role}"${x.layout.valueCol >= 0 ? ' (Permission column)' : ' (listed = granted)'}` : x.layout.layout === 'multi' ? `${x.files?.length || 0} files${x.kind === 'role-list' ? ', one eCW per-role export each' : ''}` : x.layout.layout === 'long' ? 'one row per user + setting' : `grid, ${x.layout.orientation === 'permissions-down' ? 'settings down / roles across' : 'roles down / settings across'}${x.expanded ? '; roles expanded to users' : ''}`;
 
 /**
  * How a single file is read: its sheets, the chosen sheet and layout, the users, settings and values
@@ -1629,6 +1889,7 @@ function validateToFile(baseline, actual, out, opts = {}) {
   if (out) {
     fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
     if (/\.csv$/i.test(out)) fs.writeFileSync(out, findingsCsv(v.result));
+    else if (/\.pdf$/i.test(out)) fs.writeFileSync(out, buildSummaryPdf(v.result, v.meta));
     else if (/\.json$/i.test(out)) fs.writeFileSync(out, JSON.stringify({ meta: v.meta, ...v.result }, null, 2));
     else fs.writeFileSync(out, buildReport(v.result, v.meta));
   }
@@ -1654,13 +1915,13 @@ function buildTemplate(catalog, { roles = ['Provider', 'Nurse', 'Front Desk', 'B
   ]);
 }
 
-const __exports = { documentSheets, buildEcwDocument, workbookToCatalog, detectCatalog, extractCatalog, readSpreadsheet, buildXlsx, workbookToRecords, compare, buildReport, textSummary, findingsCsv, reportSheets, validate, loadUsersFile, documentEcw, loadCatalog, describeLayout, inspect, catalogCheck, loadAliases, validateToFile, buildTemplate, perUser, actions, similarity, closest, SEVERITY, TYPE_LABEL }; Object.assign(__exports, M.parse);
+const __exports = { documentSheets, buildEcwDocument, buildSummaryPdf, summaryDoc, workbookToCatalog, detectCatalog, extractCatalog, readSpreadsheet, buildXlsx, workbookToRecords, compare, buildReport, textSummary, findingsCsv, reportSheets, validate, loadUsersFile, documentEcw, loadCatalog, describeLayout, inspect, catalogCheck, loadAliases, validateToFile, buildTemplate, perUser, actions, similarity, closest, SEVERITY, TYPE_LABEL }; Object.assign(__exports, M.parse);
 return __exports;
 })();
 
 M.api = (() => {
-let validate, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, buildReport, findingsCsv, documentEcw;
-const __link = () => { if (M.index) { validate = M.index.validate; inspect = M.index.inspect; loadAliases = M.index.loadAliases; loadCatalog = M.index.loadCatalog; loadUsersFile = M.index.loadUsersFile; buildTemplate = M.index.buildTemplate; buildReport = M.index.buildReport; findingsCsv = M.index.findingsCsv; documentEcw = M.index.documentEcw; } }; __links.push(__link); __link();
+let validate, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, buildReport, findingsCsv, documentEcw, buildSummaryPdf, summaryDoc;
+const __link = () => { if (M.index) { validate = M.index.validate; inspect = M.index.inspect; loadAliases = M.index.loadAliases; loadCatalog = M.index.loadCatalog; loadUsersFile = M.index.loadUsersFile; buildTemplate = M.index.buildTemplate; buildReport = M.index.buildReport; findingsCsv = M.index.findingsCsv; documentEcw = M.index.documentEcw; buildSummaryPdf = M.index.buildSummaryPdf; summaryDoc = M.index.summaryDoc; } }; __links.push(__link); __link();
 
 // The validator's request surface, independent of transport: the Node server (server.js) answers
 // HTTP with it, and the browser build answers the page's own calls with it in-process. Each route
@@ -1689,7 +1950,7 @@ function runFromBody(body) {
 }
 
 const view = v => ({
-  meta: v.meta, ...v.result,
+  meta: v.meta, ...v.result, summary: summaryDoc(v.result, v.meta),
   catalogFile: v.catalog ? { name: v.catalog.name, sheet: v.catalog.sheet, settings: v.catalog.settings.length, groups: v.catalog.groups.size, warnings: v.catalog.warnings } : null,
   baseline: { name: v.baseline.name, sheet: v.baseline.sheet, layout: v.baseline.layout, readAs: v.meta.baselineLayout, records: v.baseline.records.length, expanded: v.baseline.expanded, warnings: v.baseline.warnings },
   actual: { name: v.actual.name, sheet: v.actual.sheet, layout: v.actual.layout, readAs: v.meta.actualLayout, records: v.actual.records.length, warnings: v.actual.warnings, files: v.actual.files || null },
@@ -1724,6 +1985,8 @@ function handle(pathname, body) {
     const fmt = String(body.format || 'xlsx');
     const stem = `ecw-validation-${v.meta.when.slice(0, 10)}`;
     if (fmt === 'csv') return { status: 200, type: 'text/csv', data: findingsCsv(v.result), filename: `${stem}.csv` };
+    if (fmt === 'pdf') return { status: 200, type: 'application/pdf', data: buildSummaryPdf(v.result, v.meta), filename: `${stem}-summary.pdf` };
+    if (fmt === 'summary') return { status: 200, type: 'application/json', data: summaryDoc(v.result, v.meta) };
     if (fmt === 'json') return { status: 200, type: 'application/json', data: JSON.stringify(view(v), null, 2), filename: `${stem}.json` };
     return { status: 200, type: XLSX, data: buildReport(v.result, v.meta), filename: `${stem}.xlsx` };
   }
@@ -1874,7 +2137,8 @@ window.ECW = M;
       const r = await post('/api/validate', body()); const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.statusText);
       last = j; pickedUser = null; tab = 'actions'; render(); $('status').textContent = '';
-      for (const id of ['dlX', 'dlC', 'dlJ']) $(id).disabled = false;
+      for (const id of ['dlX', 'dlC', 'dlJ', 'dlP', 'prt']) $(id).disabled = false;
+      renderPrintView();
       if (!autoRun) $('out').scrollIntoView({ behavior: 'smooth', block: 'start' }); autoRun = false;
     } catch (e) { $('out').innerHTML = `<div class="err">${esc(e.message)}</div>`; $('status').textContent = ''; }
     finally { $('run').disabled = false; }
@@ -1907,6 +2171,18 @@ window.ECW = M;
     const name = (r.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1] || 'ecw-security-settings.xlsx';
     await saveFile(name, await r.blob()); $('status').textContent += ' — sheets: eCW matrix (settings down, roles across), Roles, Settings, Source';
   });
+  // The printable summary: rendered from the same data as the PDF; only it shows when printing.
+  function renderPrintView() {
+    const S = last.summary; if (!S) return;
+    $('printView').innerHTML = `<h1>${esc(S.title)}</h1>${S.subtitle ? `<p class="sub">${esc(S.subtitle)}</p>` : ''}
+      <div class="meta">${S.meta.map(([k, v]) => `<div><b>${esc(k)}:</b> ${esc(v)}</div>`).join('')}</div>
+      <div class="v ${S.verdict.pass ? 'pass' : 'fail'}"><p class="big">${esc(S.verdict.headline)}</p><p>${esc(S.verdict.detail)}</p></div>
+      ${S.roles.length ? S.roles.map(r => `<div class="role"><h2>${esc(r.name)}${r.mappedFrom ? `<small>${esc(r.mappedFrom)}</small>` : ''}</h2>${r.status ? `<p class="stat">${esc(r.status)}</p>` : ''}${r.groups.map(g => `<h3 class="${g.kind}">${esc(g.heading)}</h3><ul>${g.items.map(it => `<li>${esc(it.text)}${it.detail ? `<div class="d">${esc(it.detail)}</div>` : ''}</li>`).join('')}</ul>`).join('')}</div>`).join('') : '<p>Nothing to change: every role matches the matrix.</p>'}
+      ${S.matched.length ? `<p class="matched"><b>Roles that match the matrix exactly (${S.matched.length}):</b> ${esc(S.matched.join(', '))}</p>` : ''}
+      <p class="foot">${esc(S.footer)}</p>`;
+  }
+  $('prt').addEventListener('click', () => { renderPrintView(); try { window.print(); } catch (e) { $('status').textContent = 'printing is not available here — use the PDF button'; } });
+  $('dlP').addEventListener('click', () => download('pdf'));
   $('dlX').addEventListener('click', () => download('xlsx')); $('dlC').addEventListener('click', () => download('csv')); $('dlJ').addEventListener('click', () => download('json'));
 
   // ── results ──
@@ -2008,7 +2284,7 @@ window.ECW = M;
     actuals = Object.keys(S).filter(k => k.startsWith('roles/')).map(k => { const name = k.slice(6); return { name, data: S[k], role: name.replace(/\.xlsx$/, ''), size: Math.round(S[k].length * 0.75) }; });
     $('dropA').classList.add('has'); $('dropA').querySelector('span').innerHTML = `<b>${plural(actuals.length, 'file')}</b> <span class="muted">· sample, one per role · drop more to add</span>`;
     $('sampleNote').hidden = false; canRun(); $('tpl').disabled = false;
-    $('clearSamples').addEventListener('click', () => { files.baseline = files.catalog = files.actual = null; actuals = []; for (const p of ['b', 'a', 'c']) markDrop(p, null); $('statusB').innerHTML = $('statusC').innerHTML = $('peekB').innerHTML = $('peekA').innerHTML = $('peekC').innerHTML = $('roleFiles').innerHTML = ''; $('doc').disabled = true; $('out').innerHTML = ''; $('sampleNote').hidden = true; canRun(); for (const id of ['dlX', 'dlC', 'dlJ']) $(id).disabled = true; $('tpl').disabled = true; });
+    $('clearSamples').addEventListener('click', () => { files.baseline = files.catalog = files.actual = null; actuals = []; for (const p of ['b', 'a', 'c']) markDrop(p, null); $('statusB').innerHTML = $('statusC').innerHTML = $('peekB').innerHTML = $('peekA').innerHTML = $('peekC').innerHTML = $('roleFiles').innerHTML = ''; $('doc').disabled = true; $('out').innerHTML = ''; $('sampleNote').hidden = true; canRun(); for (const id of ['dlX', 'dlC', 'dlJ', 'dlP', 'prt']) $(id).disabled = true; $('tpl').disabled = true; $('printView').innerHTML = ''; });
     await peek('b'); await peek('c'); await peekActuals();
     autoRun = true; $('run').click();
   })();

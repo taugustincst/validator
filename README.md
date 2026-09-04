@@ -243,8 +243,11 @@ The run **passes** when there are no High or Medium findings. The CLI exits `1` 
   granted to how many users) and **Not in catalog** (names eCW does not know, with the closest
   real name), and the Findings sheet gains Group and What-it-controls columns.
 
-`--out findings.csv` or `--out result.json` write those formats instead; `--json` prints the full
-result to stdout.
+`--out summary.pdf` writes a **printable summary of the role differences** instead: the verdict,
+then each role with what to remove, grant and review (with eCW's description of each setting),
+and the roles that match. In the UI, *Print summary* opens the browser's Print dialog on the same
+summary (Save as PDF works there too) and *PDF* saves it as a file. `--out findings.csv` or
+`--out result.json` write those formats; `--json` prints the full result to stdout.
 
 ## Checking how a file was read
 
@@ -325,6 +328,7 @@ src/parse.js            spreadsheet → permission records: header/layout detect
 src/catalog.js          eCW's settings catalog: detection, parsing, lookup
 src/validate.js         matching (exact / alias / by name, suggestions), findings, actions, side-by-side detail
 src/report.js           Excel report, terminal summary, CSV
+src/summary.js, pdf.js  the printable role-differences summary, and a dependency-free PDF writer for it
 src/index.js            validate(), inspect(), loadAliases(), loadCatalog(), buildTemplate()
 src/api.js              the request routes (inspect / validate / report / template), transport-independent
 src/server.js           local HTTP server for the web UI, over api.js

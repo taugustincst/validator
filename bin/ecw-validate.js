@@ -56,7 +56,7 @@ Comparison
   --ignore-settings a*,b  settings to leave out (globs)     --no-unknown-settings   hide settings the baseline does not cover
   --include-ok            list matching pairs in the report too
 Output
-  --out FILE              report: .xlsx (default), .csv (findings) or .json
+  --out FILE              report: .xlsx (default), .pdf (printable summary of the role differences), .csv (findings) or .json
   --json                  print the full result as JSON to stdout
   --quiet                 print only the one-line verdict
   --limit N               findings to print in the terminal (default 40)

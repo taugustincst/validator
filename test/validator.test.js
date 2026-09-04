@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { buildXlsx, readXlsx, parseCsv, readSpreadsheet, unzip, zip as buildZip } from '../src/xlsx.js';
 import { normalizeValue, isAnnotated, detectLayout, extractRecords, extractRoleMap, workbookToRecords, findHeaderRow } from '../src/parse.js';
 import { compare, similarity, closest } from '../src/validate.js';
-import { validate, validateToFile, textSummary, findingsCsv, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, catalogCheck, documentEcw } from '../src/index.js';
+import { validate, validateToFile, textSummary, findingsCsv, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, catalogCheck, documentEcw, buildSummaryPdf, summaryDoc } from '../src/index.js';
 import { detectCatalog, detectCatalogLike, extractRoleList, roleNameFromSheet, lookup } from '../src/catalog.js';
 import { serve } from '../src/server.js';
 import { writeExamples, baselineSheets, ecwExportRows, catalogRows, DEVIATIONS, SETTINGS, CATALOG_EXTRA } from '../examples/make-examples.js';
@@ -90,7 +90,7 @@ test('long layout: the user (and category) carry down blank cells, as eCW prints
   assert.equal(records[2].row, 4, 'row numbers are 1-based sheet rows for the report');
 });
 
-test('matrix layout: settings down / users across, section headings, blank-is-no, and the transposed grid', () => {
+test('matrix layout: settings down / roles across, section headings, blank-is-no, and the transposed grid', () => {
   const down = [['Security Setting', 'jdoe', 'asmith'], ['Patient'], ['Delete', 'Y', ''], ['Merge', '', 'x'], ['Billing'], ['Post payments', 'N', 'Y']];
   const d = extractRecords(down);
   assert.equal(d.layout.orientation, 'permissions-down');
@@ -675,5 +675,47 @@ test('document: CLI and API', async () => {
     const res = await fetch(u + '/api/document', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ actuals: ROLE_FILES.map(f => ({ name: path.basename(f), data: b64(f), role: path.basename(f, '.xlsx') })), catalog: { name: 'c.xlsx', data: b64(CATALOG) } }) });
     assert.equal(res.status, 200); assert.match(res.headers.get('content-disposition'), /ecw-security-settings-\d{4}-\d\d-\d\d\.xlsx/);
     const wb = readXlsx(Buffer.from(await res.arrayBuffer())); assert.equal(wb.sheets[0].name, 'eCW matrix'); assert.equal(wb.sheets[0].rows.length, 1 + SETTINGS.length + CATALOG_EXTRA.length);
+  } finally { await s.close(); }
+});
+
+// ───────── the printable summary and its PDF ─────────
+
+test('summary: the role-differences summary is composed from the actions, and the PDF writer produces a valid multi-page file', () => {
+  const rolesOnly = path.join(tmp, 'matrix-roles2.xlsx'); fs.writeFileSync(rolesOnly, buildXlsx(baselineSheets({ users: false })));
+  const actuals = ROLE_FILES.map(f => ({ src: f, role: path.basename(f, '.xlsx') }));
+  const v = validate(rolesOnly, actuals, { catalog: CATALOG });
+  const S = summaryDoc(v.result, v.meta);
+  assert.equal(S.verdict.pass, false); assert.match(S.verdict.headline, /^4 roles need attention$/); assert.match(S.verdict.detail, /remove 2 permissions, grant 2 permissions, review 1 item\. 1 role matches the matrix exactly\./);
+  assert.deepEqual(S.roles.map(r => r.name), ['Front Desk', 'Nurse', 'Biller', 'Provider']);
+  const nurse = S.roles.find(r => r.name === 'Nurse'); assert.equal(nurse.groups[0].kind, 'remove'); assert.equal(nurse.groups[0].items[0].text, 'SureScripts > SS EPrescription'); assert.match(nurse.groups[0].items[0].detail, /SureScript ePrescription/);
+  assert.deepEqual(S.matched, ['Practice Admin']);
+  const pdf = buildSummaryPdf(v.result, v.meta);
+  const text = pdf.toString('latin1');
+  assert.ok(text.startsWith('%PDF-1.4')); assert.ok(text.trimEnd().endsWith('%%EOF'));
+  assert.equal((text.match(/\/Type \/Page /g) || []).length, 1, 'fits one page');
+  assert.match(text, /\(4 roles need attention\) Tj/); assert.match(text, /\(Nurse\) Tj/); assert.match(text, /REMOVE IN ECW/);
+  // the xref offsets point at the objects they claim to
+  const xref = Number(text.match(/startxref\n(\d+)/)[1]); assert.equal(text.slice(xref, xref + 4), 'xref');
+  const offs = [...text.slice(xref).matchAll(/^(\d{10}) 00000 n/gm)].map(m => Number(m[1]));
+  offs.forEach((o, i) => assert.match(text.slice(o, o + 12), new RegExp(`^${i + 1} 0 obj`), `object ${i + 1}`));
+  // a long result spills over pages; parentheses and non-ASCII are escaped
+  const rec = (subject, permission, raw) => ({ subject, permission, value: normalizeValue(raw), raw, row: 0 });
+  const many = compare(Array.from({ length: 120 }, (_, i) => rec('Role A', `Group (x) > Setting — ${i} “q”`, 'N')), Array.from({ length: 120 }, (_, i) => rec('Role A', `Group (x) > Setting — ${i} “q”`, 'Yes')));
+  const big = buildSummaryPdf(many, {}).toString('latin1');
+  assert.ok((big.match(/\/Type \/Page /g) || []).length >= 3); assert.match(big, /\\\(x\\\)/); assert.doesNotMatch(big, /[^\x00-\xff]/);
+  // through validateToFile and the API
+  const out = path.join(tmp, 'summary.pdf'); validateToFile(rolesOnly, actuals, out, {}); assert.ok(fs.readFileSync(out).subarray(0, 4).toString() === '%PDF');
+});
+
+test('summary: the API serves the PDF and the summary data', async () => {
+  const s = await serve({ port: 0 });
+  try {
+    const u = `http://127.0.0.1:${s.port}`; const b64 = f => fs.readFileSync(f).toString('base64');
+    const rolesOnly = buildXlsx(baselineSheets({ users: false })).toString('base64');
+    const body = { baseline: { name: 'm.xlsx', data: rolesOnly }, actuals: ROLE_FILES.map(f => ({ name: path.basename(f), data: b64(f), role: path.basename(f, '.xlsx') })) };
+    let r = await fetch(u + '/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, format: 'pdf' }) });
+    assert.equal(r.status, 200); assert.equal(r.headers.get('content-type'), 'application/pdf'); assert.match(r.headers.get('content-disposition'), /-summary\.pdf/); assert.equal(Buffer.from(await r.arrayBuffer()).subarray(0, 4).toString(), '%PDF');
+    r = await fetch(u + '/api/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json();
+    assert.equal(j.summary.verdict.headline, '4 roles need attention'); assert.equal(j.summary.roles.length, 4);
   } finally { await s.close(); }
 });

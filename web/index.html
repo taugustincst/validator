@@ -88,6 +88,26 @@
   .empty { color: var(--muted); padding: 14px; }
   footer { margin-top: 36px; color: var(--muted); font-size: 12.5px; max-width: 80ch; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  /* ── the printable summary ── */
+  #printView { display: none; }
+  #printView h1 { font-size: 20px; margin: 0 0 2px; } #printView .sub { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+  #printView .meta { font-size: 12px; color: var(--muted); margin: 0 0 12px; } #printView .meta div { margin: 1px 0; }
+  #printView .v { border-left: 5px solid; padding: 8px 12px; margin: 0 0 16px; } #printView .v.pass { border-color: var(--ok); } #printView .v.fail { border-color: var(--high); }
+  #printView .v .big { font-size: 17px; font-weight: 600; margin: 0 0 2px; } #printView .v.pass .big { color: var(--ok); } #printView .v.fail .big { color: var(--high); } #printView .v p { margin: 0; font-size: 13px; }
+  #printView .role { break-inside: avoid; page-break-inside: avoid; border-top: 1px solid var(--line); padding: 8px 0 6px; }
+  #printView .role h2 { font-size: 15px; letter-spacing: 0; text-transform: none; color: var(--ink); margin: 0 0 4px; } #printView .role h2 small { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 8px; }
+  #printView h3 { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; margin: 8px 0 2px; } #printView h3.remove { color: var(--high); } #printView h3.grant { color: var(--med); } #printView h3.review { color: var(--low); }
+  #printView ul { margin: 0 0 4px 18px; padding: 0; font-size: 13px; } #printView li { margin: 2px 0; } #printView li .d { color: var(--muted); font-size: 11.5px; }
+  #printView .stat { color: var(--muted); font-size: 12px; margin: 0 0 4px; }
+  #printView .matched { border-top: 1px solid var(--line); padding-top: 8px; font-size: 12.5px; } #printView .matched b { color: var(--ok); }
+  #printView .foot { color: var(--muted); font-size: 11px; margin-top: 14px; }
+  @media print {
+    body { background: #fff; color: #000; font-size: 12px; }
+    header, main > :not(#printView) { display: none !important; }
+    main { max-width: none; padding: 0; }
+    #printView { display: block !important; }
+    @page { margin: 18mm 16mm; }
+  }
 </style>
 </head>
 <body>
@@ -165,12 +185,15 @@
     <button id="doc" disabled title="One workbook of what eCW grants today: settings down, roles across, with each setting's description. Needs only the eCW exports.">Document eCW settings (.xlsx)</button>
     <span class="muted" id="status"></span>
     <span style="flex:1"></span>
+    <button id="prt" disabled title="A printable summary of the role differences — the browser's Print dialog can save it as PDF">Print summary</button>
+    <button id="dlP" disabled class="sm" title="The same summary as a PDF file">PDF</button>
     <button id="dlX" disabled>Excel report</button>
     <button id="dlC" disabled class="sm">CSV</button>
     <button id="dlJ" disabled class="sm">JSON</button>
   </div>
 
   <div id="out"></div>
+  <section id="printView" hidden></section>
   <footer><b>Has but shouldn't</b> = eCW grants it, the matrix does not (remove it in eCW, or approve it in the matrix). <b>Should have but doesn't</b> = the matrix grants it, eCW does not. <b>Review</b> = a level mismatch, or a setting the matrix does not mention.</footer>
 </main>
 <script>
@@ -294,7 +317,8 @@
       const r = await post('/api/validate', body()); const j = await r.json();
       if (!r.ok) throw new Error(j.error || r.statusText);
       last = j; pickedUser = null; tab = 'actions'; render(); $('status').textContent = '';
-      for (const id of ['dlX', 'dlC', 'dlJ']) $(id).disabled = false;
+      for (const id of ['dlX', 'dlC', 'dlJ', 'dlP', 'prt']) $(id).disabled = false;
+      renderPrintView();
       if (!autoRun) $('out').scrollIntoView({ behavior: 'smooth', block: 'start' }); autoRun = false;
     } catch (e) { $('out').innerHTML = `<div class="err">${esc(e.message)}</div>`; $('status').textContent = ''; }
     finally { $('run').disabled = false; }
@@ -327,6 +351,18 @@
     const name = (r.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1] || 'ecw-security-settings.xlsx';
     await saveFile(name, await r.blob()); $('status').textContent += ' — sheets: eCW matrix (settings down, roles across), Roles, Settings, Source';
   });
+  // The printable summary: rendered from the same data as the PDF; only it shows when printing.
+  function renderPrintView() {
+    const S = last.summary; if (!S) return;
+    $('printView').innerHTML = `<h1>${esc(S.title)}</h1>${S.subtitle ? `<p class="sub">${esc(S.subtitle)}</p>` : ''}
+      <div class="meta">${S.meta.map(([k, v]) => `<div><b>${esc(k)}:</b> ${esc(v)}</div>`).join('')}</div>
+      <div class="v ${S.verdict.pass ? 'pass' : 'fail'}"><p class="big">${esc(S.verdict.headline)}</p><p>${esc(S.verdict.detail)}</p></div>
+      ${S.roles.length ? S.roles.map(r => `<div class="role"><h2>${esc(r.name)}${r.mappedFrom ? `<small>${esc(r.mappedFrom)}</small>` : ''}</h2>${r.status ? `<p class="stat">${esc(r.status)}</p>` : ''}${r.groups.map(g => `<h3 class="${g.kind}">${esc(g.heading)}</h3><ul>${g.items.map(it => `<li>${esc(it.text)}${it.detail ? `<div class="d">${esc(it.detail)}</div>` : ''}</li>`).join('')}</ul>`).join('')}</div>`).join('') : '<p>Nothing to change: every role matches the matrix.</p>'}
+      ${S.matched.length ? `<p class="matched"><b>Roles that match the matrix exactly (${S.matched.length}):</b> ${esc(S.matched.join(', '))}</p>` : ''}
+      <p class="foot">${esc(S.footer)}</p>`;
+  }
+  $('prt').addEventListener('click', () => { renderPrintView(); try { window.print(); } catch (e) { $('status').textContent = 'printing is not available here — use the PDF button'; } });
+  $('dlP').addEventListener('click', () => download('pdf'));
   $('dlX').addEventListener('click', () => download('xlsx')); $('dlC').addEventListener('click', () => download('csv')); $('dlJ').addEventListener('click', () => download('json'));
 
   // ── results ──
@@ -428,7 +464,7 @@
     actuals = Object.keys(S).filter(k => k.startsWith('roles/')).map(k => { const name = k.slice(6); return { name, data: S[k], role: name.replace(/\.xlsx$/, ''), size: Math.round(S[k].length * 0.75) }; });
     $('dropA').classList.add('has'); $('dropA').querySelector('span').innerHTML = `<b>${plural(actuals.length, 'file')}</b> <span class="muted">· sample, one per role · drop more to add</span>`;
     $('sampleNote').hidden = false; canRun(); $('tpl').disabled = false;
-    $('clearSamples').addEventListener('click', () => { files.baseline = files.catalog = files.actual = null; actuals = []; for (const p of ['b', 'a', 'c']) markDrop(p, null); $('statusB').innerHTML = $('statusC').innerHTML = $('peekB').innerHTML = $('peekA').innerHTML = $('peekC').innerHTML = $('roleFiles').innerHTML = ''; $('doc').disabled = true; $('out').innerHTML = ''; $('sampleNote').hidden = true; canRun(); for (const id of ['dlX', 'dlC', 'dlJ']) $(id).disabled = true; $('tpl').disabled = true; });
+    $('clearSamples').addEventListener('click', () => { files.baseline = files.catalog = files.actual = null; actuals = []; for (const p of ['b', 'a', 'c']) markDrop(p, null); $('statusB').innerHTML = $('statusC').innerHTML = $('peekB').innerHTML = $('peekA').innerHTML = $('peekC').innerHTML = $('roleFiles').innerHTML = ''; $('doc').disabled = true; $('out').innerHTML = ''; $('sampleNote').hidden = true; canRun(); for (const id of ['dlX', 'dlC', 'dlJ', 'dlP', 'prt']) $(id).disabled = true; $('tpl').disabled = true; $('printView').innerHTML = ''; });
     await peek('b'); await peek('c'); await peekActuals();
     autoRun = true; $('run').click();
   })();

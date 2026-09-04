@@ -2,7 +2,7 @@
 // HTTP with it, and the browser build answers the page's own calls with it in-process. Each route
 // takes the parsed JSON body and returns { status, type, data, filename } where data is a JSON
 // value, a string, or a Buffer.
-import { validate, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, buildReport, findingsCsv, documentEcw } from './index.js';
+import { validate, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, buildReport, findingsCsv, documentEcw, buildSummaryPdf, summaryDoc } from './index.js';
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 
@@ -26,7 +26,7 @@ export function runFromBody(body) {
 }
 
 export const view = v => ({
-  meta: v.meta, ...v.result,
+  meta: v.meta, ...v.result, summary: summaryDoc(v.result, v.meta),
   catalogFile: v.catalog ? { name: v.catalog.name, sheet: v.catalog.sheet, settings: v.catalog.settings.length, groups: v.catalog.groups.size, warnings: v.catalog.warnings } : null,
   baseline: { name: v.baseline.name, sheet: v.baseline.sheet, layout: v.baseline.layout, readAs: v.meta.baselineLayout, records: v.baseline.records.length, expanded: v.baseline.expanded, warnings: v.baseline.warnings },
   actual: { name: v.actual.name, sheet: v.actual.sheet, layout: v.actual.layout, readAs: v.meta.actualLayout, records: v.actual.records.length, warnings: v.actual.warnings, files: v.actual.files || null },
@@ -61,6 +61,8 @@ export function handle(pathname, body) {
     const fmt = String(body.format || 'xlsx');
     const stem = `ecw-validation-${v.meta.when.slice(0, 10)}`;
     if (fmt === 'csv') return { status: 200, type: 'text/csv', data: findingsCsv(v.result), filename: `${stem}.csv` };
+    if (fmt === 'pdf') return { status: 200, type: 'application/pdf', data: buildSummaryPdf(v.result, v.meta), filename: `${stem}-summary.pdf` };
+    if (fmt === 'summary') return { status: 200, type: 'application/json', data: summaryDoc(v.result, v.meta) };
     if (fmt === 'json') return { status: 200, type: 'application/json', data: JSON.stringify(view(v), null, 2), filename: `${stem}.json` };
     return { status: 200, type: XLSX, data: buildReport(v.result, v.meta), filename: `${stem}.xlsx` };
   }

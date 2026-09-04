@@ -10,8 +10,10 @@ import { compare } from './validate.js';
 import { buildReport, textSummary, findingsCsv, reportSheets } from './report.js';
 import { workbookToCatalog, detectCatalog, detectCatalogLike, extractCatalog, roleNameFromSheet } from './catalog.js';
 import { documentSheets, buildEcwDocument } from './document.js';
+import { buildSummaryPdf } from './pdf.js';
+import { summaryDoc } from './summary.js';
 
-export { documentSheets, buildEcwDocument };
+export { documentSheets, buildEcwDocument, buildSummaryPdf, summaryDoc };
 import { STYLE } from './xlsx.js';
 
 export { workbookToCatalog, detectCatalog, extractCatalog };
@@ -111,7 +113,7 @@ export function loadCatalog(src) {
   try { return { name: nameOf(src, 'catalog'), ...workbookToCatalog(wb) }; } catch (e) { throw new Error(`catalog (${nameOf(src, 'catalog')}): ${e.message}`); }
 }
 
-export const describeLayout = x => x.layout.layout === 'role-list' ? `eCW per-role export for "${x.role}"${x.layout.valueCol >= 0 ? ' (Permission column)' : ' (listed = granted)'}` : x.layout.layout === 'multi' ? `${x.files?.length || 0} files${x.kind === 'role-list' ? ', one eCW per-role export each' : ''}` : x.layout.layout === 'long' ? 'one row per user + setting' : `grid, ${x.layout.orientation === 'permissions-down' ? 'settings down / users across' : 'users down / settings across'}${x.expanded ? '; roles expanded to users' : ''}`;
+export const describeLayout = x => x.layout.layout === 'role-list' ? `eCW per-role export for "${x.role}"${x.layout.valueCol >= 0 ? ' (Permission column)' : ' (listed = granted)'}` : x.layout.layout === 'multi' ? `${x.files?.length || 0} files${x.kind === 'role-list' ? ', one eCW per-role export each' : ''}` : x.layout.layout === 'long' ? 'one row per user + setting' : `grid, ${x.layout.orientation === 'permissions-down' ? 'settings down / roles across' : 'roles down / settings across'}${x.expanded ? '; roles expanded to users' : ''}`;
 
 /**
  * How a single file is read: its sheets, the chosen sheet and layout, the users, settings and values
@@ -186,6 +188,7 @@ export function validateToFile(baseline, actual, out, opts = {}) {
   if (out) {
     fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
     if (/\.csv$/i.test(out)) fs.writeFileSync(out, findingsCsv(v.result));
+    else if (/\.pdf$/i.test(out)) fs.writeFileSync(out, buildSummaryPdf(v.result, v.meta));
     else if (/\.json$/i.test(out)) fs.writeFileSync(out, JSON.stringify({ meta: v.meta, ...v.result }, null, 2));
     else fs.writeFileSync(out, buildReport(v.result, v.meta));
   }
