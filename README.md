@@ -42,6 +42,29 @@ eCW security settings validation — FAIL
 report written to report.xlsx
 ```
 
+## Reading the roles from the eCW screen
+
+eCW's *Export to Excel* on the Security Settings screen writes the four catalog columns and **not**
+the Permission checkbox, so a file export cannot say what a role holds. The validator therefore
+reads the screen:
+
+1. Open `dist/ecw-validator.html` in Chrome or Edge on the computer that runs eCW, drop the
+   catalog in slot 3, and press **Capture from the eCW screen**.
+2. In eCW open Security Settings and expand all groups. In the validator press **Share the eCW
+   window** and pick the eCW window.
+3. Select a role in eCW, type the same role name in the validator, and scroll slowly through the
+   whole list. Each frame is read on this computer: the row bands and the blue Permission
+   checkboxes from the pixels, the setting names by OCR (tesseract.js, fetched from cdnjs the first
+   time, so the computer needs internet once), and every name is snapped to the catalog so OCR
+   mistakes are corrected. The counter shows how many of the catalog's settings have been read.
+4. **Save this role**, select the next role in eCW, repeat. The captured roles become slot 2's
+   eCW side, with real checkbox states. **Download captured roles** keeps them as one workbook
+   (one sheet per role, catalog columns plus Permission) that can be dropped straight back in
+   next time, or compared in Excel.
+
+Frames never leave the computer. The capture needs a real browser window with screen sharing, so
+it is not available inside the hosted artifact; use the standalone file there.
+
 ## Documenting what eCW has
 
 ```

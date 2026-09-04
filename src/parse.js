@@ -251,10 +251,22 @@ export function workbookToRecords(wb, opts = {}) {
   // A catalog-shaped sheet (setting name / description / type / group, ± a Permission column) is
   // eCW's PER-ROLE export when it belongs to a role: opts.role, or a title line naming the role.
   // With neither it is the settings catalog — no users, no grants — and cannot be compared.
+  // A workbook with one catalog-shaped sheet PER ROLE, each with a Permission column (what the screen
+  // capture saves): every sheet is that role's grants, the role being the sheet name.
+  if (!opts.layout && !opts.subjectCol && !opts.valueCol && !opts.role && sheets.length > 1) {
+    const perRole = sheets.map(sh => [sh, detectCatalogLike(sh.rows)]).filter(([, c]) => c && c.permission >= 0);
+    if (perRole.length === sheets.length) {
+      const records = [], warnings = [], files = [];
+      for (const [sh, c] of perRole) { const r = extractRoleList(sh.rows, sh.name, c, sh.name); records.push(...r.records); warnings.push(...r.warnings); files.push({ name: sh.name, sheet: sh.name, role: sh.name, records: r.records.length, readAs: `captured role "${sh.name}" (Permission column)`, warnings: r.warnings }); }
+      return { sheet: sheets.map(x => x.name).join(' + '), sheets: sheets.map(x => x.name), layout: { layout: 'multi', kinds: ['role-list'] }, kind: 'role-list', records, roleMap: null, expanded: false, warnings, ignoredSheets: [], files, roles: sheets.map(x => x.name) };
+    }
+  }
   if (!opts.layout && !opts.subjectCol && !opts.valueCol) for (const sh of sheets) {
     if (opts.sheet && !/^(all|\*)$/i.test(String(opts.sheet)) && normKey(sh.name) !== normKey(opts.sheet)) continue;
     const c = detectCatalogLike(sh.rows); if (!c) continue;
-    const role = clean(opts.role || '') || roleNameFromSheet(sh.rows, c);
+    // A sheet with a Permission column named after its role (what the screen capture saves) is that role's list.
+    const generic = /^(sheet\s*\d*|security settings?|export|data|table\s*\d*)$/i.test(clean(sh.name));
+    const role = clean(opts.role || '') || roleNameFromSheet(sh.rows, c) || (c.permission >= 0 && !generic ? clean(sh.name) : '');
     if (!role && c.permission >= 0) throw Object.assign(new Error(`sheet "${sh.name}" is eCW's export for ONE ROLE (it has a Permission column) but the role is not stated in the file — say which role: --role "APPS Admin", or "APPS Admin=file.xlsx"`), { kind: 'role-list' });
     if (role) {
       const r = extractRoleList(sh.rows, role, c, sh.name);

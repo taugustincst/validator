@@ -10,6 +10,8 @@ import { normalizeValue, isAnnotated, detectLayout, extractRecords, extractRoleM
 import { compare, similarity, closest } from '../src/validate.js';
 import { validate, validateToFile, textSummary, findingsCsv, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, catalogCheck, documentEcw, buildSummaryPdf, summaryDoc } from '../src/index.js';
 import { detectCatalog, detectCatalogLike, extractRoleList, roleNameFromSheet, lookup } from '../src/catalog.js';
+import { findTable, findBands, matchName, RoleCapture, capturedSheets } from '../src/screen.js';
+import { normKey } from '../src/parse.js';
 import { serve } from '../src/server.js';
 import { writeExamples, baselineSheets, ecwExportRows, catalogRows, DEVIATIONS, SETTINGS, CATALOG_EXTRA } from '../examples/make-examples.js';
 
@@ -756,4 +758,64 @@ test('round trip: exports derived from the matrix itself compare clean, and plan
   assert.deepEqual(v1.result.actions.map(a => a.user).sort(), ['Role 12', 'Role 3', 'Role 7']);
   assert.equal(v1.result.pass, false);
   const S = summaryDoc(v1.result, v1.meta); assert.equal(S.verdict.headline, '3 roles need attention'); assert.equal(S.matched.length, 9);
+});
+
+// ───────── reading the eCW screen from pixels ─────────
+
+/** Paint an eCW-like Security Settings table: [{ kind: 'header'|'group'|'data', h, checked }] rows on a 900px-wide frame. */
+function paintFrame(rows, { width = 900, top = 40, boxX = 820 } = {}) {
+  const height = top + rows.reduce((a, r) => a + r.h + 1, 0) + 20;
+  const img = { width, height, data: new Uint8ClampedArray(width * height * 4) };
+  const fill = (x0, y0, x1, y1, [r, g, b]) => { for (let y = Math.max(0, y0); y < Math.min(height, y1); y++) for (let x = Math.max(0, x0); x < Math.min(width, x1); x++) { const i = (y * width + x) * 4; img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = 255; } };
+  fill(0, 0, width, height, [255, 255, 255]);
+  let y = top; const bands = [];
+  rows.forEach((row, i) => {
+    const tone = row.kind === 'header' ? [243, 228, 198] : row.kind === 'group' ? [255, 255, 255] : i % 2 ? [253, 246, 236] : [255, 255, 255];
+    fill(40, y, 880, y + row.h, tone);
+    if (row.kind === 'group') fill(44, y + 6, 58, y + 20, [245, 130, 32]);            // the orange "−" box
+    if (row.kind === 'data') { fill(boxX, y + 8, boxX + 14, y + 22, row.checked ? [30, 100, 220] : [255, 255, 255]); if (!row.checked) { fill(boxX, y + 8, boxX + 14, y + 9, [120, 120, 120]); fill(boxX, y + 21, boxX + 14, y + 22, [120, 120, 120]); } }
+    fill(48, y + 10, 48 + Math.min(300, 20 + i * 7), y + 12, [40, 40, 40]);        // a line of "text"
+    bands.push({ top: y, bottom: y + row.h - 1, ...row });
+    y += row.h; fill(40, y, 880, y + 1, [210, 210, 210]); y += 1;                     // the grey separator line
+  });
+  return { img, bands };
+}
+
+test('screen: the checkbox column, the row bands and their checked state are found from pixels', () => {
+  const rows = [{ kind: 'header', h: 26 }, { kind: 'group', h: 28 }, { kind: 'data', h: 34, checked: true }, { kind: 'data', h: 52, checked: false }, { kind: 'data', h: 34, checked: true }, { kind: 'group', h: 28 }, { kind: 'data', h: 34, checked: false }];
+  const { img, bands } = paintFrame(rows);
+  const t = findTable(img);
+  assert.ok(t, 'a table with checkboxes'); assert.ok(t.boxX >= 818 && t.boxX <= 822, `checkbox column at ${t.boxX}`); assert.ok(t.boxW >= 12 && t.boxW <= 16);
+  const found = findBands(img, t);
+  assert.deepEqual(found.map(b => b.kind), rows.map(r => r.kind));
+  found.forEach((b, i) => { assert.ok(Math.abs(b.top - bands[i].top) <= 2 && Math.abs(b.bottom - bands[i].bottom) <= 2, `band ${i} ${b.top}-${b.bottom} vs ${bands[i].top}-${bands[i].bottom}`); if (b.kind === 'data') assert.equal(b.checked, rows[i].checked, `row ${i} checked`); });
+  assert.equal(findTable({ width: 100, height: 100, data: new Uint8ClampedArray(100 * 100 * 4).fill(255) }), null, 'no checkboxes → no table');
+});
+
+test('screen: OCR text is matched to catalog names, frames merge across scrolling, and the result reads back as a role export', () => {
+  const cat = loadCatalog(CATALOG);
+  const names = new Map([...cat.byKey].map(([k, v]) => [k, v.name]));
+  assert.equal(matchName('De1ete Payrnents', names, closest, normKey).name, 'Delete Payments');
+  assert.equal(matchName('Lock Chart', names, closest, normKey).score, 1);
+  assert.equal(matchName('zzz qqq', names, closest, normKey), null);
+  const cap = new RoleCapture('Biller', names, { closest, normKey });
+  const groups = new Map([...cat.groups.keys()].map(g => [normKey(g), g]));
+  // frame 1: a group row then two settings; frame 2 (scrolled): the second setting again plus a third; the last sighting wins
+  cap.addFrame({ bands: [{ top: 0, bottom: 20, kind: 'group' }, { top: 21, bottom: 50, kind: 'data', checked: true }, { top: 51, bottom: 80, kind: 'data', checked: false }], lines: [{ text: 'Administration / Billing Setup - 54 item(s)', top: 2, bottom: 18 }, { text: 'Delete Payments', top: 25, bottom: 40 }, { text: 'Delete Refunds', top: 55, bottom: 70 }], groups });
+  cap.addFrame({ bands: [{ top: 0, bottom: 30, kind: 'data', checked: true }, { top: 31, bottom: 60, kind: 'data', checked: true }, { top: 61, bottom: 90, kind: 'data', checked: false }], lines: [{ text: 'Delete Refunds', top: 5, bottom: 20 }, { text: 'ERA', top: 35, bottom: 50 }, { text: '?? unreadable ??', top: 65, bottom: 80 }], groups });
+  assert.deepEqual(cap.counts, { seen: 3, checked: 3, frames: 2, unmatched: 1 });
+  assert.equal(cap.group, 'Administration / Billing Setup');
+  const recs = cap.records();
+  assert.deepEqual(recs.map(r => [r.permission, r.value]).sort(), [['Administration / Billing Setup > Delete Payments', 'Y'], ['Administration / Billing Setup > Delete Refunds', 'Y'], ['Administration / Billing Setup > ERA', 'Y']]);
+  assert.ok(recs.every(r => r.listedOnly === false), 'a capture carries the checkbox state: absence is not "not granted"');
+  // saved as a workbook with one sheet per role, it reads back as those roles
+  const cap2 = new RoleCapture('Provider', names, { closest, normKey }); cap2.addFrame({ bands: [{ top: 0, bottom: 30, kind: 'data', checked: false }], lines: [{ text: 'Lock Chart', top: 5, bottom: 20 }] });
+  const one = workbookToRecords(readXlsx(buildXlsx(capturedSheets([cap], cat))));
+  assert.equal(one.role, 'Biller', 'a single captured sheet is the role it is named after'); assert.equal(one.records.length, 3);
+  const wb = buildXlsx(capturedSheets([cap, cap2], cat));
+  const x = workbookToRecords(readXlsx(wb));
+  assert.equal(x.kind, 'role-list'); assert.deepEqual(x.roles, ['Biller', 'Provider']); assert.equal(x.records.length, 4);
+  assert.equal(x.records.find(r => r.subject === 'Provider').value, 'N'); assert.match(x.files[0].readAs, /captured role "Biller"/);
+  const v = validate(path.join(tmp, 'matrix-roles2.xlsx'), { name: 'captured.xlsx', data: wb });
+  assert.equal(v.result.users.ecw, 2); assert.match(v.meta.actualLayout, /2 captured roles/);
 });

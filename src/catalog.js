@@ -47,7 +47,7 @@ export function detectCatalogLike(rows) {
   if (headers.some((h, i) => h !== '' && !taken.has(i))) return null;
   // Data rows must be text names, not Y/N.
   const body = rows.slice(hi + 1, hi + 30).filter(r => clean(r[name]) !== '');
-  if (body.length < 3 || body.some(r => /^[yn]$/i.test(clean(r[name])))) return null;
+  if (body.length < 1 || body.some(r => /^[yn]$/i.test(clean(r[name])))) return null;
   return { headerRow: hi, name, desc, type, group, permission };
 }
 

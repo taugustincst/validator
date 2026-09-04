@@ -27,6 +27,7 @@ const MODULES = [
   ['document', 'src/document.js'],
   ['summary', 'src/summary.js'],
   ['pdf', 'src/pdf.js'],
+  ['screen', 'src/screen.js'],
   ['index', 'src/index.js'],
   ['api', 'src/api.js'],
 ];

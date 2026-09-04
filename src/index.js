@@ -113,7 +113,7 @@ export function loadCatalog(src) {
   try { return { name: nameOf(src, 'catalog'), ...workbookToCatalog(wb) }; } catch (e) { throw new Error(`catalog (${nameOf(src, 'catalog')}): ${e.message}`); }
 }
 
-export const describeLayout = x => x.layout.layout === 'role-list' ? `eCW per-role export for "${x.role}"${x.layout.valueCol >= 0 ? ' (Permission column)' : ' (listed = granted)'}` : x.layout.layout === 'multi' ? `${x.files?.length || 0} files${x.kind === 'role-list' ? ', one eCW per-role export each' : ''}` : x.layout.layout === 'long' ? 'one row per user + setting' : `grid, ${x.layout.orientation === 'permissions-down' ? 'settings down / roles across' : 'roles down / settings across'}${x.expanded ? '; roles expanded to users' : ''}`;
+export const describeLayout = x => x.layout.layout === 'role-list' ? `eCW per-role export for "${x.role}"${x.layout.valueCol >= 0 ? ' (Permission column)' : ' (listed = granted)'}` : x.layout.layout === 'multi' ? `${x.files?.length || 0} ${x.roles ? 'captured roles (one sheet each)' : 'files' + (x.kind === 'role-list' ? ', one eCW per-role export each' : '')}` : x.layout.layout === 'long' ? 'one row per user + setting' : `grid, ${x.layout.orientation === 'permissions-down' ? 'settings down / roles across' : 'roles down / settings across'}${x.expanded ? '; roles expanded to users' : ''}`;
 
 /**
  * How a single file is read: its sheets, the chosen sheet and layout, the users, settings and values
@@ -138,7 +138,7 @@ export function inspect(src, opts = {}, label = 'file') {
     const users = new Map(), settings = new Map(), values = new Map();
     for (const r of x.records) { users.set(r.subject, (users.get(r.subject) || 0) + 1); settings.set(r.permission, (settings.get(r.permission) || 0) + 1); values.set(r.value, (values.get(r.value) || 0) + 1); }
     Object.assign(out, {
-      kind: x.kind === 'role-list' ? 'role-list' : 'permissions', role: x.role || '',
+      kind: x.kind === 'role-list' ? 'role-list' : 'permissions', role: x.role || '', roles: x.roles || null,
       sheet: x.sheet, sheetsUsed: x.sheets, ignoredSheets: x.ignoredSheets, layout: x.layout, readAs: describeLayout(x), expanded: x.expanded, roleMap: x.roleMap, warnings: x.warnings,
       records: x.records.length,
       users: [...users].map(([name, n]) => ({ name, settings: n, role: x.roleMap?.[name] || '' })),
