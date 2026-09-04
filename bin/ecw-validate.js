@@ -176,4 +176,6 @@ async function main(argv) {
   return 2;
 }
 
-main(process.argv.slice(2)).then(code => process.exit(code), e => { process.stderr.write(`error: ${e.message}\n`); process.exit(2); });
+// Set the exit code and let the process end on its own: process.exit() right after a large write to
+// a pipe (--json into another program) would cut the output off at 64 KB.
+main(process.argv.slice(2)).then(code => { process.exitCode = code; }, e => { process.stderr.write(`error: ${e.message}\n`); process.exitCode = 2; });
