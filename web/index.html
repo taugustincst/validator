@@ -79,7 +79,7 @@
   .rcard .body h4 { margin: 8px 0 4px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; } .rcard h4.remove { color: var(--high); } .rcard h4.grant { color: var(--med); } .rcard h4.review { color: var(--low); }
   .rcard ul { margin: 0; padding: 0 0 0 18px; } .rcard li { margin: 2px 0; } .rcard li .why { color: var(--muted); font-size: 13px; }
   .rcard .stat { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
-  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; } .pill.high { background: var(--high-bg); color: var(--high); } .pill.medium { background: var(--med-bg); color: var(--med); } .pill.low { background: var(--low-bg); color: var(--low); } .pill.info { background: var(--soft); color: var(--muted); } .pill.ok { background: var(--ok-bg); color: var(--ok); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; } .pill.high { background: var(--high-bg); color: var(--high); } .pill.medium { background: var(--med-bg); color: var(--med); } .pill.low { background: var(--low-bg); color: var(--low); } .pill.info { background: var(--soft); color: var(--muted); } .pill.ok { background: var(--ok-bg); color: var(--ok); } .pill.warn { background: var(--med-bg); color: var(--med); } .bad { color: var(--high); }
   table { width: 100%; border-collapse: collapse; font-size: 13px; } th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; } th { background: var(--soft); position: sticky; top: 0; user-select: none; white-space: nowrap; font-weight: 600; font-size: 12px; letter-spacing: .02em; } th.sortable { cursor: pointer; } td { font-variant-numeric: tabular-nums; }
   .tablewrap { overflow: auto; max-height: 65vh; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
   .cell { padding: 2px 6px; border-radius: 3px; font-family: var(--mono); font-size: 12px; white-space: nowrap; } .cell.ok { background: var(--ok-bg); } .cell.excess { background: var(--high-bg); } .cell.missing, .cell.different { background: var(--med-bg); } .cell.user-not-in-baseline, .cell.user-not-in-ecw { background: var(--low-bg); } .cell.permission-not-in-baseline, .cell.permission-not-in-ecw { background: var(--soft); color: var(--muted); }
@@ -184,20 +184,26 @@
 
   <section id="capPanel" hidden class="tile" style="margin-top:14px">
     <h3>Capture from the eCW screen</h3>
-    <p class="what">1 · In eCW open <b>Security Settings</b> and expand <b>All</b> groups. 2 · Share the eCW window below. 3 · Pick the role shown in eCW, then scroll slowly through its whole list; the counter rises as rows are read. 4 · Save the role, pick the next role in eCW, repeat. Nothing leaves this computer; the frames are read here and thrown away.</p>
+    <p class="what">1 · In eCW open <b>Security Settings</b>, pick a role and expand <b>All</b> groups. 2 · Give this page the screen: <b>share the eCW window</b> (Chrome/Edge, standalone file) <i>or</i> <b>paste screenshots</b> (Win+Shift+S, then Ctrl+V here) — start with the top of the list (the column header in view), then scroll so each shot overlaps the last. 3 · Type the role, watch the counter reach every group, <b>save the role</b>, repeat for the next role. Rows are read by position against the catalog (no text recognition), so nothing is downloaded and nothing leaves this computer.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <button id="capStart" class="primary">Share the eCW window</button>
+      <button id="capShots" class="primary" title="Pick screenshot files (PNG/JPG) of the list, top to bottom — or just paste them with Ctrl+V while this panel is open">Add screenshots…</button>
+      <input type="file" id="capShotFiles" accept="image/*" multiple hidden>
       <label style="min-width:240px">Role shown in eCW <input type="text" id="capRole" list="roleNames" placeholder="e.g. APPS Admin"></label>
       <button id="capSave" disabled>Save this role</button>
+      <button id="capRestart" disabled class="sm" title="Forget what was read for this role and start again from the top of the list">Start this role over</button>
       <button id="capStop" disabled class="sm">Stop sharing</button>
       <button id="capDownload" disabled class="sm" title="One workbook, one sheet per captured role — keep it as the record, and drop it back in next time">Download captured roles (.xlsx)</button>
     </div>
-    <div id="capStatus" class="status" style="margin-top:8px"><span class="dot"></span><span class="muted">not sharing</span></div>
+    <div id="capStatus" class="status" style="margin-top:8px"><span class="dot"></span><span class="muted">waiting for the screen</span></div>
     <div id="capRoles" style="font-size:13px"></div>
-    <div style="display:grid;grid-template-columns:1fr 280px;gap:12px;margin-top:8px;align-items:start">
-      <canvas id="capView" style="width:100%;border:1px solid var(--line);border-radius:6px;background:var(--soft)"></canvas>
+    <div id="capDrop" style="display:grid;grid-template-columns:1fr 280px;gap:12px;margin-top:8px;align-items:start">
+      <canvas id="capView" tabindex="0" title="Paste screenshots here (Ctrl+V) or drop image files" style="width:100%;min-height:120px;border:1px dashed var(--line);border-radius:6px;background:var(--soft)"></canvas>
       <div id="capLog" class="muted" style="font-size:12px;max-height:260px;overflow:auto"></div>
     </div>
+    <details style="margin-top:8px"><summary class="muted" style="font-size:12px">Cross-check with text recognition (optional)</summary>
+      <label style="font-size:13px"><input type="checkbox" id="capOcr"> Also read the setting names with tesseract.js (loaded from cdnjs; needs internet and works in the standalone file only) and report any row whose name does not match its position.</label>
+    </details>
   </section>
   <div class="runbar">
     <button class="primary" id="run" disabled>Compare with the matrix</button>
@@ -310,20 +316,27 @@
   }
 
   // ── capture from the eCW screen ──
-  // Frames from getDisplayMedia are read with ECW.screen (rows + checkboxes from pixels) and an OCR step
-  // for the setting names: window.ECW_OCR when a host provides one (tests), else tesseract.js loaded from
-  // cdnjs on first use (needs internet once). Names are snapped to the catalog, so OCR errors are corrected.
-  const cap = { stream: null, video: null, timer: null, busy: false, role: null, capture: null, captures: new Map(), ocr: null, names: null, groups: null, catalog: null };
+  // Frames come from getDisplayMedia (when the browser allows it here) or from pasted / dropped
+  // screenshots. Each frame is read with ECW.screen: the Permission checkbox column and the row bands
+  // from pixels, then the rows are assigned BY POSITION against the catalog's display order
+  // (PositionalCapture) — eCW lists groups and settings in the export's order — so no text has to be
+  // recognised. Optionally tesseract.js reads the names too and flags rows that disagree.
+  const cap = { stream: null, video: null, timer: null, busy: false, role: null, capture: null, captures: new Map(), ocr: null, ocrCaps: new Map(), names: null, groups: null, catalog: null, order: null, lastSig: '' };
   const capLog = m => { const el = $('capLog'); el.innerHTML = `<div>${esc(m)}</div>` + el.innerHTML; };
   const capStatus = (cls, text) => { $('capStatus').className = 'status ' + cls; $('capStatus').innerHTML = `<span class="dot"></span><span>${text}</span>`; };
+  const canShare = () => !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
   $('capOpen').addEventListener('click', () => { $('capPanel').hidden = !$('capPanel').hidden; if (!$('capPanel').hidden) { capPrepare(); $('capPanel').scrollIntoView({ behavior: 'smooth', block: 'start' }); } });
   async function capPrepare() {
-    if (!window.ECW) { capStatus('bad', 'Screen capture runs in the standalone file only: open dist/ecw-validator.html in Chrome or Edge on the computer that runs eCW.'); $('capStart').disabled = true; return; }
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) { capStatus('bad', 'This page cannot capture a screen here. Open the standalone file (dist/ecw-validator.html) in Chrome or Edge on the computer that runs eCW.'); $('capStart').disabled = true; return; }
-    if (!files.catalog) { capStatus('warn', 'Drop the eCW settings catalog in slot 3 first: the names read from the screen are matched against it.'); $('capStart').disabled = true; return; }
+    $('capStart').disabled = true; $('capShots').disabled = true;
+    if (!window.ECW) { capStatus('bad', 'Screen capture runs in the browser build only: open dist/ecw-validator.html (or the hosted page) in Chrome or Edge.'); return; }
+    if (!files.catalog) { capStatus('warn', 'Drop the eCW settings catalog in slot 3 first: rows on the screen are matched to it by position.'); return; }
     if (!cap.catalog) { try { const r = await post('/api/inspect', { file: files.catalog, label: 'catalog' }); const x = await r.json(); if (x.kind !== 'catalog') throw new Error('slot 3 is not the catalog'); cap.catalog = ECW.index.loadCatalog({ name: files.catalog.name, data: Buffer.from(files.catalog.data, 'base64') }); } catch (e) { capStatus('bad', 'Could not read the catalog: ' + esc(e.message)); return; } }
     cap.names = new Map([...cap.catalog.byKey].map(([k, v]) => [k, v.name])); cap.groups = new Map([...cap.catalog.groups.keys()].map(g => [ECW.parse.normKey(g), g]));
-    $('capStart').disabled = false; capStatus('', `ready — ${cap.names.size} setting names to match against`);
+    cap.order = ECW.screen.displayOrder(cap.catalog);
+    $('capShots').disabled = false;
+    if (canShare()) { $('capStart').disabled = false; capStatus('', `ready — ${cap.catalog.settings.length} settings in ${cap.order.length} groups to read. Share the eCW window, or paste screenshots (Ctrl+V).`); }
+    else { $('capStart').title = 'Window sharing is blocked in this page (it runs inside another site). Paste screenshots instead, or open dist/ecw-validator.html directly in Chrome or Edge.'; capStatus('warn', `ready — ${cap.catalog.settings.length} settings in ${cap.order.length} groups to read. Window sharing is not allowed inside this page, so <b>paste screenshots</b> of the eCW list here (Win+Shift+S, then Ctrl+V) or use "Add screenshots…". The standalone file dist/ecw-validator.html can share the window directly.`); }
+    if (!cap.pasteBound) { cap.pasteBound = true; bindPasteAndDrop(); }
   }
   async function getOcr() {
     if (cap.ocr) return cap.ocr;
@@ -340,51 +353,125 @@
     return cap.ocr;
   }
   $('capStart').addEventListener('click', async () => {
+    if (!canShare()) { capStatus('warn', 'Window sharing is not allowed inside this page. Paste screenshots (Ctrl+V) or open dist/ecw-validator.html directly.'); return; }
     try {
       cap.stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 5 }, audio: false });
-    } catch (e) { capStatus('bad', 'Screen sharing was cancelled or is not allowed here: ' + esc(e.message)); return; }
+    } catch (e) { capStatus('bad', 'Screen sharing was cancelled or is not allowed here: ' + esc(e.message) + ' — you can paste screenshots instead (Ctrl+V).'); return; }
     cap.video = document.createElement('video'); cap.video.srcObject = cap.stream; cap.video.muted = true; await cap.video.play();
     cap.stream.getVideoTracks()[0].addEventListener('ended', capStopSharing);
     $('capStop').disabled = false; $('capStart').disabled = true;
-    try { await getOcr(); } catch (e) { capStatus('bad', esc(e.message)); capStopSharing(); return; }
-    capStatus('ok', 'sharing — pick the role shown in eCW, then scroll through its list');
-    cap.timer = setInterval(capTick, 900);
+    capStatus('ok', 'sharing — type the role shown in eCW, scroll to the top of its list, then scroll down slowly');
+    cap.timer = setInterval(capTick, 700);
   });
-  function capStopSharing() { if (cap.timer) clearInterval(cap.timer); cap.timer = null; if (cap.stream) for (const t of cap.stream.getTracks()) t.stop(); cap.stream = null; $('capStop').disabled = true; $('capStart').disabled = false; capStatus('', 'not sharing'); }
+  function capStopSharing() { if (cap.timer) clearInterval(cap.timer); cap.timer = null; if (cap.stream) for (const t of cap.stream.getTracks()) t.stop(); cap.stream = null; $('capStop').disabled = true; $('capStart').disabled = !canShare(); capStatus('', 'not sharing — pasted screenshots are still read'); }
   $('capStop').addEventListener('click', capStopSharing);
-  $('capRole').addEventListener('change', () => { const role = $('capRole').value.trim(); if (!role) return; if (!cap.captures.has(role)) cap.captures.set(role, new ECW.screen.RoleCapture(role, cap.names, { closest: ECW.validate.closest, normKey: ECW.parse.normKey })); cap.capture = cap.captures.get(role); cap.role = role; $('capSave').disabled = false; capLog(`reading for role "${role}"`); });
+  function capSelectRole() {
+    const role = $('capRole').value.trim(); if (!role) return;
+    if (!cap.captures.has(role)) cap.captures.set(role, new ECW.screen.PositionalCapture(role, cap.order));
+    cap.capture = cap.captures.get(role); cap.role = role; cap.lastSig = '';
+    $('capSave').disabled = false; $('capRestart').disabled = false; capLog(`reading for role "${role}" — start with the top of the list in view`);
+  }
+  $('capRole').addEventListener('change', capSelectRole);
+  $('capRestart').addEventListener('click', () => { if (!cap.role) return; cap.captures.delete(cap.role); cap.ocrCaps.delete(cap.role); capSelectRole(); capRolesList(); capStatus('', `"${esc(cap.role)}" cleared — scroll to the top of the list and start again`); });
+  // one frame (an ImageData) from any source
+  async function readFrame(img, view, source) {
+    if (!cap.capture) { if (!cap.role) capStatus('warn', 'type the role shown in eCW first (the box above), then the frames are read'); return; }
+    const table = ECW.screen.findTable(img);
+    if (!table) { capStatus('warn', `no Permission checkboxes in this ${source} — is the eCW Security Settings list showing at 100% size?`); return; }
+    const bands = ECW.screen.findBands(img, table);
+    if (!bands.some(b => b.kind === 'data')) return;
+    const nameX0 = table.left + 4, nameX1 = Math.min(table.boxX - 8, table.left + Math.max(160, Math.round((table.boxX - table.left) * 0.4)));
+    for (const b of bands) b.fp = ECW.screen.fingerprint(img, b, nameX0, nameX1);
+    const sig = bands.map(b => b.kind[0] + b.top + ':' + Math.round(b.fp.reduce((a, v) => a + v, 0))).join(',');
+    if (sig === cap.lastSig && source === 'frame') return;   // nothing moved since the last frame
+    cap.lastSig = sig;
+    const added = cap.capture.addFrame({ bands, height: img.height });
+    const c = cap.capture.counts;
+    const g = view.getContext('2d'); g.strokeStyle = added || !cap.capture.lastWarning ? '#1F6F8B' : '#B7472A'; g.lineWidth = 2;
+    for (const b of bands) if (b.kind !== 'header') g.strokeRect(table.left, b.top, table.boxX + table.boxW - table.left, b.bottom - b.top);
+    let ocrNote = '';
+    if ($('capOcr').checked) ocrNote = await ocrCrossCheck(view, table, bands);
+    if (cap.capture.lastWarning) { capStatus('warn', `<b>${esc(cap.role)}</b>: ${esc(cap.capture.lastWarning)} · ${c.seen} of ${cap.catalog.settings.length} read so far`); capLog(`${source}: ${cap.capture.lastWarning}`); }
+    else {
+      const probs = c.problems.length ? ` · <span class="bad">${esc(c.problems[0])}${c.problems.length > 1 ? ` (+${c.problems.length - 1} more)` : ''}</span>` : '';
+      capStatus(c.complete ? 'ok' : '', `<b>${esc(cap.role)}</b>: ${c.seen} of ${cap.catalog.settings.length} settings read · groups ${c.groups} · ${c.checked} checked · ${added} new rows in this ${source}${c.complete ? ' · <b>complete — save the role</b>' : ''}${probs}${ocrNote}`);
+      if (added) capLog(`${source}: +${added} rows (${c.seen} total, groups ${c.groups})`);
+      if (c.problems.length) for (const pr of c.problems) capLog('check: ' + pr);
+    }
+    capRolesList();
+  }
+  // OCR cross-check: read the names in this frame, assign them with the text-based reader too, and compare
+  async function ocrCrossCheck(view, table, bands) {
+    try {
+      const ocr = await getOcr();
+      if (!cap.ocrCaps.has(cap.role)) cap.ocrCaps.set(cap.role, new ECW.screen.RoleCapture(cap.role, cap.names, { closest: ECW.validate.closest, normKey: ECW.parse.normKey }));
+      const rc = cap.ocrCaps.get(cap.role);
+      const top = Math.min(...bands.map(b => b.top)), bottom = Math.max(...bands.map(b => b.bottom));
+      const nameW = Math.max(120, Math.round((table.boxX - table.left) * 0.34));
+      const lines = await ocr(view, { x: table.left, y: top, w: nameW, h: bottom - top + 1 });
+      rc.addFrame({ bands, lines, groups: cap.groups });
+      const byText = new Map(rc.records().map(r => [r.permission, r.value])), pos = cap.capture.records();
+      let agree = 0, differ = [];
+      for (const r of pos) { if (!byText.has(r.permission)) continue; if (byText.get(r.permission) === r.value) agree++; else differ.push(r.permission); }
+      return ` · text check: ${agree} agree${differ.length ? `, <span class="bad">${differ.length} differ</span> (${esc(differ.slice(0, 2).join('; '))})` : ''}`;
+    } catch (e) { capLog('text check skipped: ' + e.message); return ' · text check unavailable'; }
+  }
   async function capTick() {
     if (cap.busy || !cap.video || !cap.capture || cap.video.videoWidth === 0) return;
     cap.busy = true;
     try {
       const v = cap.video, view = $('capView'); view.width = v.videoWidth; view.height = v.videoHeight;
       const g = view.getContext('2d', { willReadFrequently: true }); g.drawImage(v, 0, 0);
-      const img = g.getImageData(0, 0, view.width, view.height);
-      const table = ECW.screen.findTable(img);
-      if (!table) { capStatus('warn', 'no Permission checkboxes in view — is the eCW Security Settings list showing?'); return; }
-      const bands = ECW.screen.findBands(img, table);
-      const data = bands.filter(b => b.kind === 'data'); if (!data.length) return;
-      const top = Math.min(...bands.map(b => b.top)), bottom = Math.max(...bands.map(b => b.bottom));
-      const nameW = Math.max(120, Math.round((table.boxX - table.left) * 0.34));   // the Security Setting Name column: the left third of the table
-      const lines = await cap.ocr(view, { x: table.left, y: top, w: nameW, h: bottom - top + 1 });
-      const got = cap.capture.addFrame({ bands, lines, groups: cap.groups });
-      const c = cap.capture.counts;
-      g.strokeStyle = '#1F6F8B'; g.lineWidth = 2; for (const b of data) g.strokeRect(table.left, b.top, table.boxX + table.boxW - table.left, b.bottom - b.top);
-      capStatus('ok', `<b>${esc(cap.role)}</b>: ${c.seen} of ${cap.names.size} settings read, ${c.checked} checked · ${got} rows in this frame${c.unmatched ? ` · ${c.unmatched} unreadable` : ''}`);
-      capRolesList();
+      await readFrame(g.getImageData(0, 0, view.width, view.height), view, 'frame');
     } catch (e) { capLog('frame skipped: ' + e.message); }
     finally { cap.busy = false; }
   }
-  function capRolesList() { $('capRoles').innerHTML = [...cap.captures.values()].map(c => `<span class="pill ${c.counts.seen ? 'ok' : 'info'}" style="margin:4px 6px 0 0">${esc(c.role)}: ${c.counts.seen} read, ${c.counts.checked} checked</span>`).join(''); $('capDownload').disabled = ![...cap.captures.values()].some(c => c.counts.seen); }
-  function capWorkbook() { const caps = [...cap.captures.values()].filter(c => c.counts.seen); return ECW.xlsx.buildXlsx(ECW.screen.capturedSheets(caps, cap.catalog)); }
+  async function readImageBlob(blob, label) {
+    const bmp = await createImageBitmap(blob);
+    const view = $('capView'); view.width = bmp.width; view.height = bmp.height;
+    const g = view.getContext('2d', { willReadFrequently: true }); g.drawImage(bmp, 0, 0); bmp.close?.();
+    cap.busy = true;
+    try { await readFrame(g.getImageData(0, 0, view.width, view.height), view, label); } catch (e) { capLog(`${label} skipped: ${e.message}`); } finally { cap.busy = false; }
+  }
+  async function readImageFiles(list) {
+    const imgs = [...list].filter(f => /^image\//.test(f.type)).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    if (!imgs.length) { capStatus('warn', 'no image files there — screenshots are PNG or JPG'); return; }
+    if (!cap.capture) { capStatus('warn', 'type the role shown in eCW first, then add the screenshots'); return; }
+    for (const f of imgs) await readImageBlob(f, `screenshot ${f.name}`);
+  }
+  function bindPasteAndDrop() {
+    document.addEventListener('paste', async e => {
+      if ($('capPanel').hidden) return;
+      const items = [...(e.clipboardData?.items || [])].filter(i => i.type.startsWith('image/'));
+      if (!items.length) return;
+      e.preventDefault();
+      if (!cap.capture) { capStatus('warn', 'type the role shown in eCW first (the box above), then paste the screenshot again'); return; }
+      for (const it of items) await readImageBlob(it.getAsFile(), 'pasted screenshot');
+    });
+    const dz = $('capDrop');
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.outline = '2px dashed var(--accent)'; });
+    dz.addEventListener('dragleave', () => { dz.style.outline = ''; });
+    dz.addEventListener('drop', async e => { e.preventDefault(); dz.style.outline = ''; await readImageFiles(e.dataTransfer.files); });
+    $('capShots').addEventListener('click', () => $('capShotFiles').click());
+    $('capShotFiles').addEventListener('change', async e => { await readImageFiles(e.target.files); e.target.value = ''; });
+    $('capView').addEventListener('click', () => $('capView').focus());
+  }
+  function capRolesList() { $('capRoles').innerHTML = [...cap.captures.values()].map(c => { const k = c.counts; return `<span class="pill ${k.complete ? 'ok' : k.seen ? 'warn' : 'info'}" style="margin:4px 6px 0 0" title="${esc((k.problems || []).join('\n'))}">${esc(c.role)}: ${k.seen} read, ${k.checked} checked${k.complete ? ' ✓' : k.groups ? ` · groups ${k.groups}` : ''}</span>`; }).join(''); $('capDownload').disabled = ![...cap.captures.values()].some(c => c.counts.seen); }
+  function capWorkbook() {
+    const caps = [...cap.captures.values()].filter(c => c.counts.seen);
+    const sheets = [...ECW.screen.positionalSheets(caps.filter(c => c instanceof ECW.screen.PositionalCapture), cap.catalog), ...ECW.screen.capturedSheets(caps.filter(c => !(c instanceof ECW.screen.PositionalCapture)), cap.catalog)];
+    return ECW.xlsx.buildXlsx(sheets);
+  }
   $('capSave').addEventListener('click', () => {
-    const caps = [...cap.captures.values()].filter(c => c.counts.seen); if (!caps.length) return;
+    const caps = [...cap.captures.values()].filter(c => c.counts.seen); if (!caps.length) { capStatus('warn', 'nothing read yet for this role'); return; }
+    const cur = cap.capture && cap.capture.counts;
+    if (cur && !cur.complete && !confirm(`"${cap.role}" is not complete yet (${cur.seen} of ${cap.catalog.settings.length} settings, groups ${cur.groups}${cur.problems.length ? '; ' + cur.problems[0] : ''}). Save it anyway? Settings not read will be compared as not listed.`)) return;
     const wb = capWorkbook(); const name = 'captured-roles.xlsx';
     const i = actuals.findIndex(a => a.name === name); const entry = { name, data: wb.toString('base64'), role: '', size: wb.length, captured: true };
     if (i >= 0) actuals[i] = entry; else actuals.push(entry);
     files.actual = null; $('dropA').classList.add('has'); $('dropA').querySelector('span').innerHTML = `<b>${plural(actuals.length, 'file')}</b> <span class="muted">· incl. ${plural(caps.length, 'captured role')}</span>`;
     canRun(); peekActuals(); capLog(`saved: ${caps.map(c => c.role).join(', ')} — now in slot 2 as captured-roles.xlsx`);
-    $('capRole').value = ''; cap.capture = null; cap.role = null; $('capSave').disabled = true; capStatus('ok', 'saved — pick the next role in eCW and type it above');
+    $('capRole').value = ''; cap.capture = null; cap.role = null; $('capSave').disabled = true; $('capRestart').disabled = true; capStatus('ok', 'saved — pick the next role in eCW and type it above');
   });
   $('capDownload').addEventListener('click', async () => { const wb = capWorkbook(); await saveFile('captured-roles.xlsx', new Blob([wb], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })); });
 

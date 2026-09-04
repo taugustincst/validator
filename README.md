@@ -46,24 +46,37 @@ report written to report.xlsx
 
 eCW's *Export to Excel* on the Security Settings screen writes the four catalog columns and **not**
 the Permission checkbox, so a file export cannot say what a role holds. The validator therefore
-reads the screen:
+reads the screen. It needs the catalog (slot 3) and pictures of the list, from either source:
 
-1. Open `dist/ecw-validator.html` in Chrome or Edge on the computer that runs eCW, drop the
-   catalog in slot 3, and press **Capture from the eCW screen**.
-2. In eCW open Security Settings and expand all groups. In the validator press **Share the eCW
-   window** and pick the eCW window.
-3. Select a role in eCW, type the same role name in the validator, and scroll slowly through the
-   whole list. Each frame is read on this computer: the row bands and the blue Permission
-   checkboxes from the pixels, the setting names by OCR (tesseract.js, fetched from cdnjs the first
-   time, so the computer needs internet once), and every name is snapped to the catalog so OCR
-   mistakes are corrected. The counter shows how many of the catalog's settings have been read.
-4. **Save this role**, select the next role in eCW, repeat. The captured roles become slot 2's
-   eCW side, with real checkbox states. **Download captured roles** keeps them as one workbook
-   (one sheet per role, catalog columns plus Permission) that can be dropped straight back in
-   next time, or compared in Excel.
+- **Share the eCW window** — open `dist/ecw-validator.html` in Chrome or Edge on the computer
+  that runs eCW, press **Capture from the eCW screen**, then **Share the eCW window** and pick the
+  eCW window. Frames are read continuously while you scroll.
+- **Paste screenshots** — where window sharing is not allowed (the hosted artifact runs inside
+  another site, which blocks it), take screenshots of the list instead (Win+Shift+S), paste them
+  into the capture panel with Ctrl+V, or pick the files with **Add screenshots…** / drop them on
+  the panel. Same reader, same result.
 
-Frames never leave the computer. The capture needs a real browser window with screen sharing, so
-it is not available inside the hosted artifact; use the standalone file there.
+Either way:
+
+1. In eCW open Security Settings, select a role, expand all groups, and scroll to the top of the
+   list so the column header is in view. Type the same role name in the validator.
+2. Scroll down (or take the next screenshot) so that each picture overlaps the previous one. The
+   counter shows settings read and groups reached; a warning tells you when a picture did not
+   overlap the last one, so you scroll back a little.
+3. When the counter says **complete**, press **Save this role**, select the next role in eCW and
+   repeat. The captured roles become slot 2's eCW side, with real checkbox states. **Download
+   captured roles** keeps them as one workbook (one sheet per role, catalog columns plus
+   Permission) that can be dropped straight back in next time, or compared in Excel.
+
+How a picture is read: the Permission checkbox column, the row bands and each checkbox's state
+come from the pixels. Names are **not** read as text: eCW lists the groups and the settings inside
+them in the same order as its export, so the k-th row under the g-th group header *is* the
+catalog's k-th setting of that group. Rows are told apart across overlapping pictures by a
+fingerprint of the name cell, and the reader reports when a group shows more or fewer rows than
+the catalog (a catalog from a different eCW version, or a collapsed group). Nothing is downloaded
+and nothing leaves the computer. An optional cross-check reads the names with tesseract.js as
+well (standalone file, internet needed once) and flags rows whose name disagrees with its
+position.
 
 ## Documenting what eCW has
 
@@ -365,9 +378,10 @@ test/                   node --test suite (also run on Windows and Linux in GitH
 
 ## Verified
 
-- 45 automated tests cover the spreadsheet reader and writer, layout detection, value handling,
+- 48 automated tests cover the spreadsheet reader and writer, layout detection, value handling,
   role and setting matching, every finding type, the catalog, the eCW inventory, the report, the
-  PDF, the CLI, the HTTP routes and the browser bundle's decoder.
+  PDF, the CLI, the HTTP routes, the browser bundle's decoder and the screen reader (checkbox
+  column and row bands from pixels; positional reading across overlapping, pinned-header frames).
 - A round-trip test derives one eCW export per role from a matrix, confirms the comparison is
   clean, then plants changes and confirms exactly those are found.
 - The same round trip on a real 28-role, 1163-setting practice matrix and eCW's 1147-setting
@@ -380,3 +394,6 @@ test/                   node --test suite (also run on Windows and Linux in GitH
 - eCW's report formats vary by version and module. If a file is read wrongly, the preview shows
   it; pick the sheet, layout or column names explicitly.
 - The validator compares the documents you give it; it does not connect to eCW.
+- Screen reading assumes eCW shows the list at 100% zoom with every group expanded, in the
+  export's order; pictures must overlap and start at the top of the list. The counter and the
+  per-group checks say when that did not hold.

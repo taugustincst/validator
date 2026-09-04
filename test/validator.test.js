@@ -10,7 +10,7 @@ import { normalizeValue, isAnnotated, detectLayout, extractRecords, extractRoleM
 import { compare, similarity, closest } from '../src/validate.js';
 import { validate, validateToFile, textSummary, findingsCsv, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, catalogCheck, documentEcw, buildSummaryPdf, summaryDoc } from '../src/index.js';
 import { detectCatalog, detectCatalogLike, extractRoleList, roleNameFromSheet, lookup } from '../src/catalog.js';
-import { findTable, findBands, matchName, RoleCapture, capturedSheets } from '../src/screen.js';
+import { findTable, findBands, matchName, RoleCapture, capturedSheets, fingerprint, sameCell, PositionalCapture, displayOrder, positionalSheets } from '../src/screen.js';
 import { normKey } from '../src/parse.js';
 import { serve } from '../src/server.js';
 import { writeExamples, baselineSheets, ecwExportRows, catalogRows, DEVIATIONS, SETTINGS, CATALOG_EXTRA } from '../examples/make-examples.js';
@@ -774,7 +774,8 @@ function paintFrame(rows, { width = 900, top = 40, boxX = 820 } = {}) {
     fill(40, y, 880, y + row.h, tone);
     if (row.kind === 'group') fill(44, y + 6, 58, y + 20, [245, 130, 32]);            // the orange "−" box
     if (row.kind === 'data') { fill(boxX, y + 8, boxX + 14, y + 22, row.checked ? [30, 100, 220] : [255, 255, 255]); if (!row.checked) { fill(boxX, y + 8, boxX + 14, y + 9, [120, 120, 120]); fill(boxX, y + 21, boxX + 14, y + 22, [120, 120, 120]); } }
-    fill(48, y + 10, 48 + Math.min(300, 20 + i * 7), y + 12, [40, 40, 40]);        // a line of "text"
+    // "text": a run of word-like blocks whose widths follow the row's name (or index), like real labels
+    { let x = 64; const seed = row.name || String(i); for (let k = 0; k < 6 && x < 340; k++) { const wdt = 10 + (seed.charCodeAt(k % seed.length) * 7 + k * 13) % 30; fill(x, y + 9, x + wdt, y + 13, [40, 40, 40]); x += wdt + 6; } }
     bands.push({ top: y, bottom: y + row.h - 1, ...row });
     y += row.h; fill(40, y, 880, y + 1, [210, 210, 210]); y += 1;                     // the grey separator line
   });
@@ -818,4 +819,39 @@ test('screen: OCR text is matched to catalog names, frames merge across scrollin
   assert.equal(x.records.find(r => r.subject === 'Provider').value, 'N'); assert.match(x.files[0].readAs, /captured role "Biller"/);
   const v = validate(path.join(tmp, 'matrix-roles2.xlsx'), { name: 'captured.xlsx', data: wb });
   assert.equal(v.result.users.ecw, 2); assert.match(v.meta.actualLayout, /2 captured roles/);
+});
+
+test('screen: reading by position — a long list scrolled through overlapping frames is assigned from the catalog order, gaps are reported', () => {
+  const cat = loadCatalog(CATALOG);
+  const order = displayOrder(cat);
+  // the whole list as one tall frame: header, then per group a group row and its settings; some checked
+  const rows = [{ kind: 'header', h: 26 }];
+  const checkedNames = new Set(['Delete Payments', 'Lock Chart', 'Batches', 'SS EPrescription']);
+  for (const g of order) { rows.push({ kind: 'group', h: 28 }); for (const n of g.settings) rows.push({ kind: 'data', h: 34 + (n.length % 3) * 8, checked: checkedNames.has(n), name: n }); }
+  const { img: tall } = paintFrame(rows, { top: 0 });
+  const viewH = 300;
+  const crop = y0 => { const h = Math.min(viewH, tall.height - y0); const data = new Uint8ClampedArray(tall.width * h * 4); data.set(tall.data.subarray(y0 * tall.width * 4, (y0 + h) * tall.width * 4)); return { width: tall.width, height: h, data }; };
+  const frameAt = y0 => { const img = crop(y0); const t = findTable(img) || findTable(tall); const bands = findBands(img, { ...t }).map(b => ({ ...b, fp: fingerprint(img, b, t.left + 4, t.left + 300) })); return { bands, height: img.height }; };
+  const pc = new PositionalCapture('Biller', order);
+  for (let y = 0; y < tall.height; y += 200) pc.addFrame(frameAt(y));   // 300px windows every 200px: always overlapping
+  const c = pc.counts;
+  assert.equal(c.complete, true, JSON.stringify(c)); assert.equal(c.seen, cat.settings.length); assert.equal(c.gaps, 0);
+  const recs = pc.records();
+  assert.equal(recs.filter(r => r.value === 'Y').length, 4);
+  assert.equal(recs.find(r => /Delete Payments/.test(r.permission)).value, 'Y'); assert.equal(recs.find(r => /Delete Refunds/.test(r.permission)).value, 'N');
+  // a frame with no overlap is refused and counted as a gap; the list must start at the header
+  const pc2 = new PositionalCapture('X', order);
+  assert.equal(pc2.addFrame(frameAt(600)), 0); assert.match(pc2.lastWarning, /scroll to the top/);
+  pc2.addFrame(frameAt(0)); pc2.addFrame(frameAt(900)); assert.equal(pc2.gaps, 1); assert.match(pc2.lastWarning, /no overlap/);
+  // a pinned column header (eCW keeps it in view while the list scrolls): the row cut under it is not a new row
+  const pinned = y0 => { const f = frameAt(y0); const hdr = frameAt(0).bands.find(b => b.kind === 'header'); const cut = f.bands.filter(b => b.kind !== 'header' && b.bottom > hdr.bottom + 4).map(b => ({ ...b, top: Math.max(b.top, hdr.bottom + 1) })); return { bands: [hdr, ...cut], height: f.height }; };
+  const pc3 = new PositionalCapture('P', order);
+  for (let y = 0; y < tall.height; y += 150) pc3.addFrame(pinned(y));   // the pinned header eats part of the overlap, so scroll a little less per frame
+  assert.equal(pc3.counts.complete, true, JSON.stringify(pc3.counts)); assert.equal(pc3.gaps, 0);
+  // fingerprints: the same cell in two frames matches, different cells do not
+  const a = frameAt(0).bands.filter(b => b.kind === 'data'), b2 = frameAt(20).bands.filter(b => b.kind === 'data');
+  assert.ok(sameCell(a[0].fp, b2[0].fp)); assert.ok(!sameCell(a[0].fp, a[1].fp));
+  // saved as a workbook it reads back as the role
+  const x = workbookToRecords(readXlsx(buildXlsx(positionalSheets([pc], cat))));
+  assert.equal(x.role, 'Biller'); assert.equal(x.records.length, cat.settings.length);
 });
