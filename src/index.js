@@ -8,7 +8,7 @@ import { lookup, bareName } from './catalog.js';
 import { closest } from './validate.js';
 import { compare } from './validate.js';
 import { buildReport, textSummary, findingsCsv, reportSheets } from './report.js';
-import { workbookToCatalog, detectCatalog, extractCatalog } from './catalog.js';
+import { workbookToCatalog, detectCatalog, detectCatalogLike, extractCatalog, roleNameFromSheet } from './catalog.js';
 import { STYLE } from './xlsx.js';
 
 export { workbookToCatalog, detectCatalog, extractCatalog };
@@ -39,7 +39,9 @@ export function validate(baseline, actual, opts = {}) {
     catch (e) { throw new Error(`${label} (${nameOf(src, label)}): ${e.message}`); }
   };
   const b = load(baseline, opts.baseline, 'baseline');
-  const a = load(actual, opts.actual, 'eCW export');
+  const a = loadActuals(actual, opts.actual, load);
+  // A role-keyed baseline against per-role eCW exports needs no user list: drop that hint.
+  if (a.kind === 'role-list') b.warnings = b.warnings.filter(w => !/columns look like ROLES/.test(w));
   if (!b.records.length) throw new Error(`baseline (${b.name}): no permission records found on sheet "${b.sheet}"`);
   if (!a.records.length) throw new Error(`eCW export (${a.name}): no permission records found on sheet "${a.sheet}"`);
   let cat = null;
@@ -52,6 +54,32 @@ export function validate(baseline, actual, opts = {}) {
     actual: path.basename(a.name), actualSheet: a.sheet, actualLayout: describeLayout(a), actualWarnings: a.warnings,
   };
   return { result, meta, baseline: b, actual: a, catalog: cat };
+}
+
+/**
+ * The eCW side: one file, or several — eCW exports security settings one ROLE at a time, so a full
+ * picture is one file per role. Each entry is a path / { name, data }, or { src, role } to name the
+ * role the file belongs to (`"APPS Admin=file.xlsx"` on the command line). The records are merged;
+ * sheet, layout and warnings are reported per file.
+ */
+function loadActuals(actual, o, load) {
+  const list = Array.isArray(actual) ? actual : [actual];
+  if (!list.length) throw new Error('eCW export: no file given');
+  const parts = list.map((entry, i) => {
+    const src = entry && typeof entry === 'object' && 'src' in entry ? entry.src : entry;
+    const role = entry && typeof entry === 'object' && entry.role ? String(entry.role) : (list.length === 1 ? o?.role : undefined);
+    const label = list.length === 1 ? 'eCW export' : `eCW export ${i + 1}`;
+    const x = load(src, { ...(o || {}), role }, label);
+    if (!x.records.length) throw new Error(`${label} (${x.name}): no permission records found on sheet "${x.sheet}"`);
+    return x;
+  });
+  if (parts.length === 1) return parts[0];
+  const roles = parts.map(p => p.role).filter(Boolean);
+  const dup = roles.filter((r, i) => roles.findIndex(x => normKey(x) === normKey(r)) !== i);
+  const warnings = parts.flatMap(p => p.warnings.map(w => `${path.basename(p.name)}: ${w}`));
+  if (dup.length) warnings.push(`the same role appears in more than one file: ${[...new Set(dup)].join(', ')} — the later file wins`);
+  const kinds = new Set(parts.map(p => p.kind || p.layout.layout));
+  return { name: parts.map(p => path.basename(p.name)).join(' + '), sheet: parts.map(p => `${path.basename(p.name)}:${p.sheet}`).join(', '), sheets: parts.flatMap(p => p.sheets), layout: { layout: 'multi', kinds: [...kinds] }, kind: kinds.size === 1 ? parts[0].kind : 'mixed', records: parts.flatMap(p => p.records), roleMap: null, expanded: false, warnings, ignoredSheets: [], files: parts.map(p => ({ name: path.basename(p.name), sheet: p.sheet, role: p.role || '', records: p.records.length, readAs: describeLayout(p), warnings: p.warnings })) };
 }
 
 /** A user → role file (User | Role columns; .csv or .xlsx) for a baseline whose columns are roles. Returns a Map (see extractRoleMap). */
@@ -68,7 +96,7 @@ export function loadCatalog(src) {
   try { return { name: nameOf(src, 'catalog'), ...workbookToCatalog(wb) }; } catch (e) { throw new Error(`catalog (${nameOf(src, 'catalog')}): ${e.message}`); }
 }
 
-export const describeLayout = x => x.layout.layout === 'long' ? 'one row per user + setting' : `grid, ${x.layout.orientation === 'permissions-down' ? 'settings down / users across' : 'users down / settings across'}${x.expanded ? '; roles expanded to users' : ''}`;
+export const describeLayout = x => x.layout.layout === 'role-list' ? `eCW per-role export for "${x.role}"${x.layout.valueCol >= 0 ? ' (Permission column)' : ' (listed = granted)'}` : x.layout.layout === 'multi' ? `${x.files?.length || 0} files${x.kind === 'role-list' ? ', one eCW per-role export each' : ''}` : x.layout.layout === 'long' ? 'one row per user + setting' : `grid, ${x.layout.orientation === 'permissions-down' ? 'settings down / users across' : 'users down / settings across'}${x.expanded ? '; roles expanded to users' : ''}`;
 
 /**
  * How a single file is read: its sheets, the chosen sheet and layout, the users, settings and values
@@ -79,12 +107,13 @@ export function inspect(src, opts = {}, label = 'file') {
   const wb = readAny(src, label);
   const sheets = wb.sheets.map(s => ({ name: s.name, rows: s.rows.length, cols: Math.max(0, ...s.rows.map(r => r.length)), headerRow: findHeaderRow(s.rows) + 1, headers: (s.rows[findHeaderRow(s.rows)] || []).map(clean).slice(0, 40), preview: s.rows.slice(0, 12).map(r => r.slice(0, 12).map(c => c === undefined ? '' : c)) }));
   const out = { name: path.basename(nameOf(src, label)), sheets, error: null, kind: 'permissions' };
-  const catSheet = !opts.layout && !opts.subjectCol && wb.sheets.find(sh => detectCatalog(sh.rows));
+  const catSheet = !opts.layout && !opts.subjectCol && !opts.role && wb.sheets.find(sh => detectCatalog(sh.rows) && !roleNameFromSheet(sh.rows, detectCatalog(sh.rows)));
   if (catSheet) {
     const c = extractCatalogSafe(catSheet.rows);
     if (c) {
       const groups = [...c.groups].map(([group, n]) => ({ group, settings: n })).sort((a, b) => b.settings - a.settings);
-      return Object.assign(out, { kind: 'catalog', sheet: catSheet.name, sheetsUsed: [catSheet.name], readAs: 'eCW security settings catalog (setting name, description, type, group) — no users, no grants', records: c.settings.length, settings: c.settings.map(s => ({ name: s.name, group: s.group })), groups, users: [], values: [], warnings: [...c.warnings, 'this file lists the settings eCW knows, not what any user has: use it as the CATALOG, and export the per-user security settings for the eCW side'], sample: c.settings.slice(0, 10).map(s => ({ user: '', setting: s.name, value: s.group, raw: s.description, row: s.row, sheet: catSheet.name })) });
+      out.roleExportPossible = true; out.hasPermissionColumn = false;
+      return Object.assign(out, { kind: 'catalog', sheet: catSheet.name, sheetsUsed: [catSheet.name], readAs: 'eCW security settings catalog (setting name, description, type, group) — no users, no grants', records: c.settings.length, settings: c.settings.map(s => ({ name: s.name, group: s.group })), groups, users: [], values: [], warnings: [...c.warnings, 'this file has the catalog columns and names no role: as the CATALOG it is the list of settings eCW knows; as an eCW per-ROLE export (Security Settings → pick a role → Export to Excel) it needs the role name — give it, and every listed setting is read as granted to that role'], sample: c.settings.slice(0, 10).map(s => ({ user: '', setting: s.name, value: s.group, raw: s.description, row: s.row, sheet: catSheet.name })) });
     }
   }
   try {
@@ -92,6 +121,7 @@ export function inspect(src, opts = {}, label = 'file') {
     const users = new Map(), settings = new Map(), values = new Map();
     for (const r of x.records) { users.set(r.subject, (users.get(r.subject) || 0) + 1); settings.set(r.permission, (settings.get(r.permission) || 0) + 1); values.set(r.value, (values.get(r.value) || 0) + 1); }
     Object.assign(out, {
+      kind: x.kind === 'role-list' ? 'role-list' : 'permissions', role: x.role || '',
       sheet: x.sheet, sheetsUsed: x.sheets, ignoredSheets: x.ignoredSheets, layout: x.layout, readAs: describeLayout(x), expanded: x.expanded, roleMap: x.roleMap, warnings: x.warnings,
       records: x.records.length,
       users: [...users].map(([name, n]) => ({ name, settings: n, role: x.roleMap?.[name] || '' })),

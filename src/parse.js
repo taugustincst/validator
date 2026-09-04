@@ -19,7 +19,7 @@ export const VALUE_HEADERS = ['value', 'access', 'allowed', 'allow', 'granted', 
 export const DESCRIPTION_HEADERS = ['description', 'security setting description', 'setting description', 'what it controls', 'what it does', 'details', 'help', 'notes', 'comment', 'comments'];
 export const CATEGORY_HEADERS = ['category', 'module', 'section', 'group name', 'area', 'menu', 'tab', 'security group', 'setting group', 'folder'];
 
-import { detectCatalog } from './catalog.js';
+import { detectCatalog, detectCatalogLike, extractRoleList, roleNameFromSheet } from './catalog.js';
 
 export const normKey = s => String(s ?? '').toLowerCase().normalize('NFKC').replace(/[‘’“”]/g, "'").replace(/[^a-z0-9]+/g, ' ').trim();
 export const clean = s => String(s ?? '').replace(/\s+/g, ' ').trim();
@@ -248,9 +248,20 @@ const looksLikeRoleMap = name => /^(user|users|role map|roles map|mapping|user r
 export function workbookToRecords(wb, opts = {}) {
   const sheets = wb.sheets || [];
   if (!sheets.length) throw new Error('the workbook has no sheets');
-  // eCW's settings catalog (name / description / type / group) has no users and no grants: say so
-  // instead of reading its Type and Group columns as two "users".
-  if (!opts.layout && !opts.subjectCol && !opts.valueCol) for (const sh of sheets) { if (opts.sheet && !/^(all|\*)$/i.test(String(opts.sheet)) && normKey(sh.name) !== normKey(opts.sheet)) continue; const c = detectCatalog(sh.rows); if (c) throw Object.assign(new Error(`sheet "${sh.name}" is eCW's security settings CATALOG (setting name, description, type, group) — it lists settings but no users or grants, so it cannot be compared. Use it as the catalog (--catalog, or the Catalog slot) and export the per-user security settings for the eCW side.`), { kind: 'catalog' }); }
+  // A catalog-shaped sheet (setting name / description / type / group, ± a Permission column) is
+  // eCW's PER-ROLE export when it belongs to a role: opts.role, or a title line naming the role.
+  // With neither it is the settings catalog — no users, no grants — and cannot be compared.
+  if (!opts.layout && !opts.subjectCol && !opts.valueCol) for (const sh of sheets) {
+    if (opts.sheet && !/^(all|\*)$/i.test(String(opts.sheet)) && normKey(sh.name) !== normKey(opts.sheet)) continue;
+    const c = detectCatalogLike(sh.rows); if (!c) continue;
+    const role = clean(opts.role || '') || roleNameFromSheet(sh.rows, c);
+    if (!role && c.permission >= 0) throw Object.assign(new Error(`sheet "${sh.name}" is eCW's export for ONE ROLE (it has a Permission column) but the role is not stated in the file — say which role: --role "APPS Admin", or "APPS Admin=file.xlsx"`), { kind: 'role-list' });
+    if (role) {
+      const r = extractRoleList(sh.rows, role, c, sh.name);
+      return { sheet: sh.name, sheets: [sh.name], layout: { layout: 'role-list', headerRow: c.headerRow, permissionCol: c.name, categoryCol: c.group, descriptionCol: c.desc, valueCol: c.permission, role }, records: r.records, roleMap: null, expanded: false, warnings: r.warnings, ignoredSheets: sheets.filter(x => x !== sh).map(x => x.name), role, kind: 'role-list' };
+    }
+    throw Object.assign(new Error(`sheet "${sh.name}" is eCW's security settings CATALOG (setting name, description, type, group) — it lists settings but no users, roles or grants, so it cannot be compared. Use it as the catalog (--catalog, or the Catalog slot). If it is eCW's export for ONE ROLE (Security Settings → pick the role → Export to Excel), say which role: --role "APPS Admin", or "APPS Admin=file.xlsx".`), { kind: 'catalog' });
+  }
   const warnings = [];
   const pick = name => { const s = sheets.find(x => normKey(x.name) === normKey(name)); if (!s) throw new Error(`sheet "${name}" not found; sheets are: ${sheets.map(x => x.name).join(', ')}`); return s; };
   let roleMap = null, roleSheet = null;
@@ -301,7 +312,7 @@ export function workbookToRecords(wb, opts = {}) {
   } else if (layout?.layout === 'matrix' && layout.orientation === 'permissions-down') {
     const subjects = [...new Set(records.map(r => r.subject))];
     const roleLike = subjects.filter(s => /\b(admin|user|super|provider|nurse|rn|ma|lvn|biller|billing|front desk|psr|specialist|read only|assistant|coordinator|supervisor|analyst|liaison|liason|compliance|him|it)\b/i.test(s)).length;
-    if (subjects.length && roleLike >= subjects.length / 2) warnings.push(`the columns look like ROLES (${subjects.slice(0, 5).join(', ')}${subjects.length > 5 ? ', …' : ''}) and there is no user → role sheet: eCW's per-user export will be compared against these role names unless you add a Users sheet (User | Role) or pass a users file`);
+    if (subjects.length && roleLike >= subjects.length / 2) warnings.push(`the columns look like ROLES (${subjects.slice(0, 5).join(', ')}${subjects.length > 5 ? ', …' : ''}): that is right when the eCW side is one export per role; if the eCW side is a per-USER list, add a Users sheet (User | Role) or pass a users file so each user is compared against their role`);
   }
   return { sheet: used.join(' + '), sheets: used, layout, records, roleMap: roleMap ? Object.fromEntries([...roleMap.values()].map(v => [v.user, v.role])) : null, expanded, warnings, ignoredSheets: ignored };
 }

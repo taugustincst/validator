@@ -9,7 +9,7 @@ import { buildXlsx, readXlsx, parseCsv, readSpreadsheet, unzip, zip as buildZip 
 import { normalizeValue, isAnnotated, detectLayout, extractRecords, extractRoleMap, workbookToRecords, findHeaderRow } from '../src/parse.js';
 import { compare, similarity, closest } from '../src/validate.js';
 import { validate, validateToFile, textSummary, findingsCsv, inspect, loadAliases, loadCatalog, loadUsersFile, buildTemplate, catalogCheck } from '../src/index.js';
-import { detectCatalog, lookup } from '../src/catalog.js';
+import { detectCatalog, detectCatalogLike, extractRoleList, roleNameFromSheet, lookup } from '../src/catalog.js';
 import { serve } from '../src/server.js';
 import { writeExamples, baselineSheets, ecwExportRows, catalogRows, DEVIATIONS, SETTINGS, CATALOG_EXTRA } from '../examples/make-examples.js';
 
@@ -233,7 +233,7 @@ test('cli: validate exits 1 on findings (0 with --fail-on none), inspect describ
   r = run('inspect', EXPORT);
   assert.equal(r.status, 0); assert.match(r.stdout, new RegExp(`header on row 4[\\s\\S]*one row per user \\+ setting[\\s\\S]*${8 * (SETTINGS.length + 1) + SETTINGS.length} records, 9 users, ${SETTINGS.length + 1} settings[\\s\\S]*first records:[\\s\\S]*row\\s+5\\s+AGARCIA`));
   r = run('validate', '--baseline', BASELINE);
-  assert.equal(r.status, 2); assert.match(r.stderr, /needs --baseline <file> and --actual <file>/);
+  assert.equal(r.status, 2); assert.match(r.stderr, /needs --baseline <file> and at least one --actual <file>/);
   r = run('validate', '--baseline', path.join(tmp, 'missing.xlsx'), '--actual', EXPORT);
   assert.equal(r.status, 2); assert.match(r.stderr, /error: baseline file not found: .*missing\.xlsx/);
   const dir = path.join(tmp, 'ex'); fs.mkdirSync(dir);
@@ -383,7 +383,7 @@ test('csv: semicolon-separated (European Excel) files are read', () => {
 test('catalog: eCW\'s Security Settings export (name / description / type / group) is recognised, and refused as an eCW export', () => {
   const rows = catalogRows();
   const cols = detectCatalog(rows);
-  assert.deepEqual(cols, { headerRow: 0, name: 0, desc: 1, type: 2, group: 3 });
+  assert.deepEqual(cols, { headerRow: 0, name: 0, desc: 1, type: 2, group: 3, permission: -1 });
   const cat = loadCatalog(CATALOG);
   assert.equal(cat.settings.length, SETTINGS.length + CATALOG_EXTRA.length); assert.equal(cat.groups.size, 13);
   assert.equal(lookup(cat, 'Delete Payments').group, 'Administration / Billing Setup');
@@ -392,9 +392,9 @@ test('catalog: eCW\'s Security Settings export (name / description / type / grou
   // Not catalogs: a grid with role columns, a template with blank role columns, a list with a value column
   assert.equal(detectCatalog([['Category', 'Security Setting', 'What it controls', 'MA', 'RN'], ['Billing', 'Batches', 'x', '', ''], ['Billing', 'ERA', 'y', '', ''], ['Billing', 'ICD', 'z', '', '']]), null, 'unclaimed role columns → a permission grid');
   assert.equal(detectCatalog([['Security Setting Name', 'Description', 'Value'], ['A', 'a', 'Y'], ['B', 'b', 'N'], ['C', 'c', 'Y']]), null, 'a value column → grants');
-  assert.throws(() => validate(BASELINE, CATALOG), /eCW export \(.*catalog\.xlsx\): sheet "Sheet1" is eCW's security settings CATALOG[\s\S]*export the per-user security settings/);
+  assert.throws(() => validate(BASELINE, CATALOG), /eCW export \(.*catalog\.xlsx\): sheet "Sheet1" is eCW's security settings CATALOG[\s\S]*export for ONE ROLE[\s\S]*--role/);
   const x = inspect(CATALOG);
-  assert.equal(x.kind, 'catalog'); assert.equal(x.records, cat.settings.length); assert.equal(x.groups[0].group, 'Administration / Billing Setup'); assert.match(x.warnings.join(' '), /use it as the CATALOG/);
+  assert.equal(x.kind, 'catalog'); assert.equal(x.records, cat.settings.length); assert.equal(x.groups[0].group, 'Administration / Billing Setup'); assert.match(x.warnings.join(' '), /as the CATALOG it is the list of settings eCW knows; as an eCW per-ROLE export/);
 });
 
 test('catalog: findings carry group + description, baseline typos are flagged with the real name, coverage is reported', () => {
@@ -501,7 +501,7 @@ test('matrix: description and group columns beside the setting are metadata, not
   assert.match(dropped.warnings.join('\n'), /left out as asked: "eCW SUPPORT-DONT NEED TO VALIDATE", "Read Only"/);
   // the workbook has no Users sheet and the columns look like roles: say so
   const x = workbookToRecords({ sheets: [{ name: 'UPGRADE V12.0.4', rows: MATRIX }, { name: 'Sheet1', rows: [] }] });
-  assert.equal(x.expanded, false); assert.match(x.warnings.join('\n'), /columns look like ROLES[\s\S]*no user → role sheet/);
+  assert.equal(x.expanded, false); assert.match(x.warnings.join('\n'), /columns look like ROLES[\s\S]*one export per role[\s\S]*per-USER list, add a Users sheet/);
 });
 
 test('matrix: a separate users → roles file expands the role columns to users', () => {
@@ -537,4 +537,87 @@ test('catalog: lookup peels "Group >" prefixes from the left, so a setting whose
   assert.deepEqual(cc.unknown.map(u => u.name).sort(), ['Administration / Billing Setup > Eligibility Admin', 'Documents > Configure Letter Category']);
   assert.equal(cc.uncovered.length, cat.settings.length - 3);
   assert.equal(catalogCheck([{ permission: 'Delete Payment' }], cat).unknown[0].suggestion, 'Delete Payments');
+});
+
+// ───────── eCW exports one ROLE at a time ─────────
+
+const roleExport = (perm, withCol) => { const rows = [['Security Setting Name', 'Security Setting Description', 'Security Setting Type', 'Security group Name', ...(withCol ? ['Permission'] : [])]]; for (const [g, n, d] of [...SETTINGS.map(([g, n, d]) => [g, n, d])]) { const on = perm(g, n); if (withCol) rows.push([n, d, 'Old', g, on ? 'TRUE' : 'FALSE']); else if (on) rows.push([n, d, 'Old', g]); } return rows; };
+
+test('role export: a catalog-shaped file with a role name is that role\'s grants; with a Permission column the value is used; without, listed = granted', () => {
+  const noCol = roleExport((g, n) => SETTINGS.find(s => s[1] === n)[3][0] === 1, false);   // what the Provider role has, as eCW lists it
+  const like = detectCatalogLike(noCol); assert.equal(like.permission, -1);
+  assert.equal(detectCatalog(noCol) !== null, true, 'without a role it is indistinguishable from the catalog');
+  assert.throws(() => extractRoleList(noCol, ''), /the role this export belongs to is not stated/);
+  const r = extractRoleList(noCol, 'Provider', like, 'Sheet1');
+  assert.equal(r.records.length, SETTINGS.filter(s => s[3][0]).length); assert.ok(r.records.every(x => x.subject === 'Provider' && x.value === 'Y'));
+  assert.equal(r.records.find(x => /Lock Chart/.test(x.permission)).permission, 'Progress Notes > Lock Chart');
+  assert.match(r.warnings[0], /no Permission column — all \d+ listed settings were read as GRANTED to "Provider"/);
+  const withCol = roleExport((g, n) => SETTINGS.find(s => s[1] === n)[3][0] === 1, true);
+  const c2 = detectCatalogLike(withCol); assert.equal(c2.permission, 4); assert.equal(detectCatalog(withCol), null, 'a Permission column means grants, not the catalog');
+  const r2 = extractRoleList(withCol, 'Provider', c2);
+  assert.equal(r2.records.length, SETTINGS.length); assert.equal(r2.granted, SETTINGS.filter(s => s[3][0]).length);
+  assert.equal(r2.records.find(x => /Delete Payments/.test(x.permission)).value, 'N');
+  // a title line names the role
+  const titled = [['Security Settings - Billing'], [], ...withCol];
+  assert.equal(roleNameFromSheet(titled, detectCatalogLike(titled)), 'Billing');
+  const x = workbookToRecords({ sheets: [{ name: 'Sheet1', rows: titled }] });
+  assert.equal(x.kind, 'role-list'); assert.equal(x.role, 'Billing'); assert.equal(x.layout.layout, 'role-list');
+  assert.throws(() => workbookToRecords({ sheets: [{ name: 'Sheet1', rows: withCol }] }), /export for ONE ROLE \(it has a Permission column\) but the role is not stated/);
+  assert.throws(() => workbookToRecords({ sheets: [{ name: 'Sheet1', rows: noCol }] }), /CATALOG[\s\S]*export for ONE ROLE[\s\S]*--role/);
+  assert.equal(workbookToRecords({ sheets: [{ name: 'Sheet1', rows: noCol }] }, { role: 'Provider' }).records[0].subject, 'Provider');
+  const ins = inspect({ name: 'p.xlsx', data: buildXlsx([{ name: 'S', rows: noCol }]) }, { role: 'Provider' });
+  assert.equal(ins.kind, 'role-list'); assert.equal(ins.role, 'Provider'); assert.match(ins.readAs, /per-role export for "Provider" \(listed = granted\)/);
+});
+
+test('role export: several files, one per role, are merged and compared against the matrix\'s role columns; role names match without their parenthetical', () => {
+  // baseline: the matrix by role (no Users sheet) — its columns are Provider, Nurse, … ; eCW: one export per role, named as eCW names them
+  const matrix = [['Security Item', 'Description', 'Security Group Name', ...['Provider', 'Front Desk', 'Nurse', 'Biller', 'Practice Admin']], ...SETTINGS.map(([g, n, d, v]) => [n, d, g, ...v.map(x => (x ? 'X' : ''))])];
+  const bf = path.join(tmp, 'matrix2.xlsx'); fs.writeFileSync(bf, buildXlsx([{ name: 'UPGRADE V12.0.4', rows: matrix }]));
+  const has = role => (g, n) => SETTINGS.find(s => s[1] === n)[3][['Provider', 'Front Desk', 'Nurse', 'Biller', 'Practice Admin'].indexOf(role)] === 1;
+  const files = {
+    'Provider (Provider)': roleExport(has('Provider'), false),
+    'Nurse (RN/LVN)': roleExport((g, n) => has('Nurse')(g, n) || n === 'SS EPrescription', false),   // excess: a nurse can e-prescribe
+    'Biller': roleExport((g, n) => has('Biller')(g, n) && n !== 'Delete Payments', true),            // missing: with a Permission column
+    'Practice Admin (Admin)': roleExport(has('Practice Admin'), true),
+  };
+  const actuals = Object.entries(files).map(([role, rows]) => ({ src: { name: role.replace(/[^a-z]/gi, '_') + '.xlsx', data: buildXlsx([{ name: 'Sheet1', rows }]) }, role }));
+  const v = validate(bf, actuals, { baseline: {}, catalog: CATALOG });
+  const r = v.result;
+  assert.equal(r.users.baseline, 5); assert.equal(r.users.ecw, 4); assert.equal(r.users.both, 4, 'Provider (Provider), Nurse (RN/LVN) and Practice Admin (Admin) match their matrix columns by name');
+  assert.deepEqual(r.matches.filter(m => m.kind === 'user').map(m => [m.baseline, m.ecw]).sort(), [['Nurse', 'Nurse (RN/LVN)'], ['Practice Admin', 'Practice Admin (Admin)'], ['Provider', 'Provider (Provider)']]);
+  assert.equal(r.findings.find(f => f.type === 'user-not-in-ecw').user, 'Front Desk');
+  assert.equal(r.findings.find(f => f.type === 'excess').user, 'Nurse'); assert.equal(r.findings.find(f => f.type === 'excess').permission, 'SureScripts > SS EPrescription');
+  assert.equal(r.findings.find(f => f.type === 'missing').user, 'Biller'); assert.match(r.findings.find(f => f.type === 'missing').permission, /Delete Payments/);
+  assert.deepEqual(r.counts, { ...r.counts, excess: 1, missing: 1, different: 0, 'user-not-in-baseline': 0, 'user-not-in-ecw': 1 });
+  assert.equal(r.counts.ok, 4 * SETTINGS.length - 2);
+  assert.equal(v.actual.files.length, 4); assert.equal(v.actual.files[1].role, 'Nurse (RN/LVN)'); assert.match(v.meta.actualLayout, /4 files/);
+  assert.match(v.actual.warnings.join('\n'), /Nurse__RN_LVN_\.xlsx: sheet "Sheet1": no Permission column — all \d+ listed settings were read as GRANTED/);
+  assert.match(v.actual.warnings.join('\n'), /Biller\.xlsx: sheet "Sheet1": role "Biller": \d+ of \d+ settings granted/);
+  // the same role twice → the later file wins, and it says so
+  const twice = validate(bf, [actuals[0], actuals[0]], {}); assert.match(twice.actual.warnings.join('\n'), /same role appears in more than one file: Provider \(Provider\)/);
+  // suggestions strip the parenthetical too
+  const rec = (subject, permission, raw) => ({ subject, permission, value: normalizeValue(raw), raw, row: 0 });
+  const sug = compare([rec('Clinical IT Liason', 'A', 'Y')], [rec('Clinical IT Liaison (Clinical IT Liaison)', 'A', 'Yes')]);
+  assert.equal(sug.findings.find(f => f.type === 'user-not-in-ecw').suggestion, 'Clinical IT Liaison (Clinical IT Liaison)');
+});
+
+test('role export: CLI takes one --actual per role ("Role=file"), --role for one file, --actual-dir; the server takes actuals[]', async () => {
+  const run = (...a) => spawnSync(process.execPath, [path.join(root, 'bin/ecw-validate.js'), ...a], { encoding: 'utf8' });
+  const matrix = [['Security Item', 'Description', 'Security Group Name', 'Provider', 'Nurse'], ...SETTINGS.map(([g, n, d, v]) => [n, d, g, v[0] ? 'X' : '', v[2] ? 'X' : ''])];
+  const bf = path.join(tmp, 'matrix3.xlsx'); fs.writeFileSync(bf, buildXlsx([{ name: 'M', rows: matrix }]));
+  const dir = path.join(tmp, 'roles'); fs.mkdirSync(dir, { recursive: true });
+  const prov = roleExport((g, n) => SETTINGS.find(s => s[1] === n)[3][0] === 1, false), nurse = roleExport((g, n) => SETTINGS.find(s => s[1] === n)[3][2] === 1, false);
+  fs.writeFileSync(path.join(dir, 'Provider.xlsx'), buildXlsx([{ name: 'S', rows: prov }])); fs.writeFileSync(path.join(dir, 'Nurse.xlsx'), buildXlsx([{ name: 'S', rows: nurse }]));
+  let r = run('validate', '--baseline', bf, '--actual', `Provider=${path.join(dir, 'Provider.xlsx')}`, '--actual', `Nurse=${path.join(dir, 'Nurse.xlsx')}`, '--quiet');
+  assert.equal(r.status, 0, r.stderr + r.stdout); assert.match(r.stdout, /^PASS/);
+  r = run('validate', '--baseline', bf, '--actual-dir', dir, '--quiet'); assert.equal(r.status, 0, r.stderr + r.stdout); assert.match(r.stdout, /^PASS/);
+  r = run('validate', '--baseline', bf, '--actual', path.join(dir, 'Provider.xlsx'), '--role', 'Provider', '--fail-on', 'none'); assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /Nurse — expected by the baseline but not in eCW/);
+  r = run('validate', '--baseline', bf, '--actual', path.join(dir, 'Provider.xlsx')); assert.equal(r.status, 2); assert.match(r.stderr, /CATALOG[\s\S]*--role/);
+  r = run('inspect', path.join(dir, 'Provider.xlsx'), '--role', 'Provider'); assert.equal(r.status, 0); assert.match(r.stdout, /per-role export for "Provider"/);
+  const s = await serve({ port: 0 });
+  try {
+    const u = `http://127.0.0.1:${s.port}`; const b64 = f => fs.readFileSync(f).toString('base64');
+    const res = await fetch(u + '/api/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ baseline: { name: 'm.xlsx', data: b64(bf) }, actuals: [{ name: 'Provider.xlsx', data: b64(path.join(dir, 'Provider.xlsx')), role: 'Provider' }, { name: 'Nurse.xlsx', data: b64(path.join(dir, 'Nurse.xlsx')), role: 'Nurse' }] }) });
+    const j = await res.json(); assert.equal(res.status, 200, j.error); assert.equal(j.pass, true); assert.equal(j.actual.files.length, 2); assert.equal(j.actual.files[1].role, 'Nurse');
+  } finally { await s.close(); }
 });

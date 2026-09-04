@@ -75,20 +75,34 @@ otherwise use `node bin/ecw-validate.js`.
 
 ## The inputs
 
-There are two eCW exports, and they are different things:
+**eCW's Security Settings screen works by role.** The left pane lists the roles (APPS Admin,
+Billing, Provider, Read Only…); pick one and the right pane shows every setting with its
+description, group and a Permission checkbox; **Export to Excel** writes that role's list. The
+export has the same four columns whether it is one role's list or the whole catalog:
 
-| eCW export | Columns | What it is | Slot |
+| Security Setting Name | Security Setting Description | Security Setting Type | Security group Name |
 |---|---|---|---|
-| **Security Settings catalog** (Admin → Security Settings → export) | Security Setting Name, Description, Type, Security group Name | Every setting eCW knows (~1,100 rows). **No users, no grants.** | Catalog |
-| **Per-user security settings** (Admin → Security Settings → pick users → Print/Export, or Reports → User Security Settings) | User, Category, Security Setting, Value | What each user actually has. | eCW export |
+| 277CA - Download 277CA File | Allow access to Download Claim Status 277CA | Old | Administration / Billing Setup |
 
-The validator tells the two apart. A catalog dropped into the eCW-export slot is moved to the
-catalog slot (in the CLI, it is refused with a message saying which export to use instead).
+So the same file shape plays two parts, and the validator needs to be told which:
 
-**The eCW export (what users actually have).** In eCW go to *Admin → Security Settings* (or
-*Reports → User Security Settings*), pick the users, and *Print / Export* to Excel. Save as `.xlsx`
-or `.csv`. The typical export is one row per user and setting, with a title block above the header
-and the user name printed once per block; all of that is handled:
+| Used as | How | Meaning |
+|---|---|---|
+| **eCW export for one role** | name the role: `--actual "APPS Admin=Security_Setting (3).xlsx"`, or `--role`, or type it in the UI | every listed setting is granted to that role (a Permission column, if present, is used instead) |
+| **Catalog** | `--catalog`, or the Catalog slot | the list of settings eCW knows, for checking names and coverage |
+
+Export one file per role, then give them all: `--actual "Billing=…" --actual "Provider=…"`, or
+put them in a folder named after their roles and pass `--actual-dir roles/`, or drop them all on
+the UI's eCW slot and fill in the role beside each file (prefilled from the file name when it
+matches a role in the baseline). eCW's role names carry a description in parentheses
+("APPS Admin (Admin (Apps Support))"); they are matched to the baseline's plain names
+automatically and the pairing is listed under Matches. The assumption that *listed = granted*
+is stated in the warnings; check it once against a low-privilege role's export, which should be
+short.
+
+**A per-user list** works the same way when eCW gives you one (Reports → User Security
+Settings): one row per user and setting, a title block above the header, the user name printed
+once per block:
 
 | User Name | Category | Security Setting | Value |
 |---|---|---|---|
@@ -128,8 +142,9 @@ difference rather than being guessed), duplicated setting rows are named and it 
 copies agree, and a column whose header says it should not be validated is pointed out.
 `--ignore-roles "eCW SUPPORT*"` (or *Leave out roles/users* in the UI) drops such columns.
 
-**Roles.** If the grid's columns are roles rather than people, the comparison needs to know which
-user has which role. Either add a sheet named `Users` (or `Roles`, `Mapping`, `Staff`…) to the
+**Roles.** When both sides are by role (a role-keyed matrix against per-role eCW exports) nothing
+more is needed. If the eCW side is per user and the grid's columns are roles, the comparison needs
+to know which user has which role. Either add a sheet named `Users` (or `Roles`, `Mapping`, `Staff`…) to the
 workbook with a `User` column and a `Role` column, or keep the list in a separate file and pass it
 with `--users users.xlsx` (or the *Users → roles file* drop zone). Each role's settings are expanded
 to its users before the comparison. Users whose role has no column, columns that are not roles, and

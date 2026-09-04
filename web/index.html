@@ -72,9 +72,10 @@
       <div id="peekB"></div>
     </div>
     <div class="card">
-      <h2>2 · eCW export — what users <em>actually</em> have</h2>
-      <p class="hint">In eCW: Admin → Security Settings (or Reports → User Security Settings) → Print / Export to Excel. Save as .xlsx or .csv and drop it here.</p>
-      <label class="drop" id="dropA"><input type="file" id="fileA" accept=".xlsx,.xlsm,.csv,.tsv,.txt"><span>Drop the eCW export here or click to choose</span></label>
+      <h2>2 · eCW export — what roles <em>actually</em> have</h2>
+      <p class="hint">In eCW: Security Settings → pick a role → <b>Export to Excel</b>. eCW exports one role at a time, so drop one file per role (several at once is fine) and say which role each one is. A per-user list (User | Setting | Value) also works.</p>
+      <label class="drop" id="dropA"><input type="file" id="fileA" multiple accept=".xlsx,.xlsm,.csv,.tsv,.txt"><span>Drop the eCW export(s) here or click to choose</span></label>
+      <div id="roleFiles"></div>
       <details><summary>Reading options</summary><div class="opts">
         <label>Sheet <select id="aSheet"><option value="">auto</option><option value="all">all sheets (merge)</option></select></label>
         <label>Layout <select id="aLayout"><option value="">auto</option><option value="matrix">grid</option><option value="long">one row per user + setting</option></select></label>
@@ -124,6 +125,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const files = { baseline: null, actual: null, aliases: null, catalog: null, users: null };
+  let actuals = [];   // [{ name, data, role, size }] — one eCW export per role
   let last = null, sortKey = 'severity', sortDir = 1, tab = 'actions', pickedUser = null;
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const readFile = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res({ name: f.name, data: String(r.result).split(',')[1] || '' }); r.onerror = () => rej(r.error); r.readAsDataURL(f); });
@@ -132,21 +134,30 @@
   const RANK = { high: 3, medium: 2, low: 1, info: 0 };
 
   const fileOpts = p => ({ ignoreSubjects: p === 'b' ? $('bIgnore').value : '', sheet: $(p + 'Sheet').value, layout: $(p + 'Layout').value, orientation: $(p + 'Orient').value, rolesSheet: p === 'b' ? $('bRoles').value : '', blankIsNo: p === 'a' ? $('aBlank').value === 'no' : true, subjectCol: $(p + 'UserCol').value, permissionCol: $(p + 'PermCol').value, valueCol: $(p + 'ValCol').value, categoryCol: $(p + 'CatCol').value });
-  const body = () => ({ baseline: files.baseline, actual: files.actual, aliases: files.aliases, catalog: files.catalog, users: files.users, options: { baseline: fileOpts('b'), actual: fileOpts('a'), ignoreUsers: $('ignoreUsers').value, ignorePermissions: $('ignorePerms').value, onlyUsers: $('onlyUsers').value, matchByName: $('matchByName').checked, reportUnknownPermissions: $('unknownPerms').checked } });
+  const body = () => ({ baseline: files.baseline, actual: files.actual, actuals: actuals.map(a => ({ name: a.name, data: a.data, role: a.role })), aliases: files.aliases, catalog: files.catalog, users: files.users, options: { baseline: fileOpts('b'), actual: fileOpts('a'), ignoreUsers: $('ignoreUsers').value, ignorePermissions: $('ignorePerms').value, onlyUsers: $('onlyUsers').value, matchByName: $('matchByName').checked, reportUnknownPermissions: $('unknownPerms').checked } });
 
+  const canRun = () => { $('run').disabled = !(files.baseline && (files.actual || actuals.length)); };
   function wire(drop, input, key, after) {
-    const set = async f => { if (!f) return; files[key] = await readFile(f); drop.classList.add('has'); drop.querySelector('span').innerHTML = `<b>${esc(f.name)}</b> · ${(f.size / 1024).toFixed(0)} KB`; $('run').disabled = !(files.baseline && files.actual); after && after(); };
-    input.addEventListener('change', () => set(input.files[0]));
+    const set = async f => { if (!f) return; files[key] = await readFile(f); drop.classList.add('has'); drop.querySelector('span').innerHTML = `<b>${esc(f.name)}</b> · ${(f.size / 1024).toFixed(0)} KB`; canRun(); after && after(); };
+    const setMany = async list => {
+      list = [...list].filter(Boolean); if (!list.length) return;
+      if (key !== 'actual') return set(list[0]);
+      for (const f of list) { const r = await readFile(f); const i = actuals.findIndex(a => a.name === f.name); const entry = { ...r, role: guessRole(f.name), size: f.size }; if (i >= 0) actuals[i] = entry; else actuals.push(entry); }
+      files.actual = null; drop.classList.add('has'); drop.querySelector('span').innerHTML = `<b>${actuals.length} file${actuals.length > 1 ? 's' : ''}</b> · drop more to add`; canRun(); after && after();
+    };
+    input.addEventListener('change', () => setMany(input.files));
     drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
     drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-    drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); set(e.dataTransfer.files[0]); });
+    drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); setMany(e.dataTransfer.files); });
   }
-  wire($('dropB'), $('fileB'), 'baseline', () => peek('b')); wire($('dropA'), $('fileA'), 'actual', () => peek('a')); wire($('dropAl'), $('fileAl'), 'aliases'); wire($('dropC'), $('fileC'), 'catalog', () => { peek('c'); if (files.baseline) peek('b'); }); wire($('dropU'), $('fileU'), 'users', () => peek('b'));
+  let baselineRoles = [];   // the baseline's role/user names, to prefill each eCW file's role from its file name
+  const guessRole = fname => { const stem = fname.replace(/\.[^.]+$/, '').replace(/[_\-]+/g, ' ').trim().toLowerCase(); const hit = baselineRoles.find(r => stem === r.toLowerCase()) || baselineRoles.find(r => stem.includes(r.toLowerCase()) || r.toLowerCase().includes(stem)); return hit || ''; };
+  wire($('dropB'), $('fileB'), 'baseline', () => peek('b')); wire($('dropA'), $('fileA'), 'actual', () => peekActuals()); wire($('dropAl'), $('fileAl'), 'aliases'); wire($('dropC'), $('fileC'), 'catalog', () => { peek('c'); if (files.baseline) peek('b'); }); wire($('dropU'), $('fileU'), 'users', () => peek('b'));
   $('bIgnore').addEventListener('change', () => peek('b'));
   const SLOT = { b: 'baseline', a: 'actual', c: 'catalog' };
   function markDrop(p, f, note) { const d = $('drop' + p.toUpperCase()); if (!f) { d.classList.remove('has'); d.querySelector('span').textContent = p === 'c' ? 'Drop the catalog here or click to choose' : p === 'b' ? 'Drop the baseline here or click to choose' : 'Drop the eCW export here or click to choose'; return; } d.classList.add('has'); d.querySelector('span').innerHTML = `<b>${esc(f.name)}</b>${note ? ` <span class="muted">${esc(note)}</span>` : ''}`; }
-  for (const p of ['b', 'a']) for (const id of ['Sheet', 'Layout', 'Orient', 'UserCol', 'PermCol', 'ValCol', 'CatCol']) $(p + id).addEventListener('change', () => peek(p));
-  $('bRoles').addEventListener('change', () => peek('b')); $('aBlank').addEventListener('change', () => peek('a'));
+  for (const id of ['Sheet', 'Layout', 'Orient', 'UserCol', 'PermCol', 'ValCol', 'CatCol']) { $('b' + id).addEventListener('change', () => peek('b')); $('a' + id).addEventListener('change', () => peekActuals()); }
+  $('bRoles').addEventListener('change', () => peek('b')); $('aBlank').addEventListener('change', () => peekActuals());
 
   // ── "what is in this file": inspect on drop and on every option change ──
   async function peek(p) {
@@ -171,6 +182,7 @@
     // sheet picker follows the file
     const sel = $(p + 'Sheet'); const cur = sel.value; sel.innerHTML = `<option value="">auto</option><option value="all">all sheets (merge)</option>` + x.sheets.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join(''); sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
     const usedSet = new Set(x.sheetsUsed || []);
+    if (p === 'b' && !x.error) { baselineRoles = x.users.map(u => u.name); if (actuals.length) { for (const a of actuals) if (!a.role) a.role = guessRole(a.name); peekActuals(); } }
     let h = `<div class="peek">`;
     if (x.error) h += `<div class="err">Could not read permission data: ${esc(x.error)}<br><span class="muted">Pick the sheet, layout or column names under “Reading options”.</span></div>`;
     else h += `<div class="kv"><div>Read as</div><div><b>${esc(x.readAs)}</b> from sheet “${esc(x.sheet)}”${x.expanded ? ` · ${Object.keys(x.roleMap || {}).length} users mapped to roles` : ''}</div>
@@ -188,6 +200,22 @@
     box.innerHTML = h;
   }
 
+  // ── the eCW side: one card per file, with its role ──
+  async function peekActuals() {
+    const box = $('roleFiles'); const peekBox = $('peekA'); peekBox.innerHTML = '';
+    if (!actuals.length) { box.innerHTML = ''; return; }
+    box.innerHTML = actuals.map((a, i) => `<div class="ucard" style="margin-top:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>${esc(a.name)}</b><span class="muted">${(a.size / 1024).toFixed(0)} KB</span><label style="flex:1;min-width:220px;margin:0">Role this export belongs to <input type="text" data-role="${i}" value="${esc(a.role)}" list="roleNames" placeholder="e.g. APPS Admin"></label><button class="sm" data-rm="${i}">remove</button></div><div class="peek" data-peek="${i}"><span class="muted">reading…</span></div></div>`).join('') + `<datalist id="roleNames">${baselineRoles.map(r => `<option value="${esc(r)}">`).join('')}</datalist>`;
+    for (const inp of box.querySelectorAll('input[data-role]')) inp.addEventListener('change', () => { actuals[+inp.dataset.role].role = inp.value.trim(); peekOne(+inp.dataset.role); });
+    for (const b of box.querySelectorAll('button[data-rm]')) b.addEventListener('click', () => { actuals.splice(+b.dataset.rm, 1); if (!actuals.length) { $('dropA').classList.remove('has'); markDrop('a', null); } else $('dropA').querySelector('span').innerHTML = `<b>${actuals.length} file${actuals.length > 1 ? 's' : ''}</b> · drop more to add`; canRun(); peekActuals(); });
+    for (let i = 0; i < actuals.length; i++) peekOne(i);
+  }
+  async function peekOne(i) {
+    const a = actuals[i]; const el = document.querySelector(`[data-peek="${i}"]`); if (!a || !el) return;
+    let x; try { const r = await post('/api/inspect', { file: { name: a.name, data: a.data }, options: { ...fileOpts('a'), role: a.role }, label: 'eCW export' }); x = await r.json(); if (!r.ok) throw new Error(x.error || r.statusText); } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+    if (x.kind === 'catalog' && !a.role) { el.innerHTML = `<div class="warn">This file has eCW's catalog columns and names no role. If it is the export for <b>one role</b> (Security Settings → pick the role → Export to Excel), type the role above and it is read as that role's grants (every listed setting = granted${x.hasPermissionColumn ? '' : ', since there is no Permission column'}). If it is the full settings catalog, remove it here and drop it in the Catalog slot.</div>`; return; }
+    if (x.error) { el.innerHTML = `<div class="err">${esc(x.error)}</div>`; return; }
+    el.innerHTML = `<div class="kv"><div>Read as</div><div><b>${esc(x.readAs)}</b> from sheet “${esc(x.sheet)}”</div><div>Found</div><div><b>${x.records}</b> records · ${x.users.length} ${x.kind === 'role-list' ? 'role' : 'users/roles'} · <b>${x.settings.length}</b> settings · values: ${x.values.map(v => `${esc(v.value)} ×${v.count}`).join(', ')}</div>${x.kind !== 'role-list' ? `<div>Users</div><div class="chips">${x.users.map(u => `<span class="chip">${esc(u.name)}</span>`).join('')}</div>` : ''}</div>${x.warnings?.length ? `<div class="warn"><b>Check:</b><ul>${x.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}`;
+  }
   // ── validate ──
   $('run').addEventListener('click', async () => {
     $('status').textContent = 'validating…'; $('run').disabled = true; $('out').innerHTML = '';
@@ -221,7 +249,7 @@
     const j = last, c = j.bySeverity;
     const warn = [...(j.baseline.warnings || []).map(w => 'Baseline: ' + w), ...(j.actual.warnings || []).map(w => 'eCW export: ' + w)];
     $('out').innerHTML = `<div class="verdict ${j.pass ? 'pass' : 'fail'}">${j.pass ? 'PASS — eCW matches the baseline (no high or medium findings)' : `FAIL — ${c.high} high, ${c.medium} medium finding${c.high + c.medium === 1 ? '' : 's'}`}</div>
-      <p class="muted" style="margin:8px 0 0">Baseline “${esc(j.baseline.name)}”: ${esc(j.baseline.readAs)}, ${j.baseline.records} records. eCW export “${esc(j.actual.name)}”: ${esc(j.actual.readAs)}, ${j.actual.records} records.<br>
+      <p class="muted" style="margin:8px 0 0">Baseline “${esc(j.baseline.name)}”: ${esc(j.baseline.readAs)}, ${j.baseline.records} records. ${j.actual.files ? `eCW exports: ${j.actual.files.map(f => `“${esc(f.name)}” → <b>${esc(f.role || '?')}</b> (${f.records})`).join(', ')}.` : `eCW export “${esc(j.actual.name)}”: ${esc(j.actual.readAs)}, ${j.actual.records} records.`}<br>
       Users: <b>${j.users.baseline}</b> in baseline · <b>${j.users.ecw}</b> in eCW · <b>${j.users.both}</b> in both. Settings: <b>${j.permissions.baseline}</b> · <b>${j.permissions.ecw}</b> · <b>${j.permissions.both}</b> in both${j.matches.length ? ` (${j.matches.length} paired by alias or name)` : ''}. Compared <b>${j.compared}</b> pairs, <b>${j.counts.ok}</b> match.${j.catalog ? `<br>Catalog “${esc(j.catalogFile.name)}”: <b>${j.catalog.total}</b> settings, <b>${j.catalog.covered}</b> covered by the baseline, <b>${j.catalog.grantedUncovered}</b> not covered but granted to someone in eCW${j.catalog.unknown.length ? `, <b>${j.catalog.unknown.length}</b> baseline name(s) eCW does not know` : ''}.` : ''}</p>
       ${warn.length ? `<div class="warn"><b>Check how the files were read:</b><ul>${warn.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}
       <div class="stats"><div class="stat high"><b>${c.high}</b><span>high</span></div><div class="stat medium"><b>${c.medium}</b><span>medium</span></div><div class="stat low"><b>${c.low}</b><span>low</span></div><div class="stat"><b>${c.info}</b><span>info</span></div><div class="stat ok"><b>${j.counts.ok}</b><span>matching</span></div>

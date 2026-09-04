@@ -9,7 +9,7 @@
 // should be checked against: a baseline setting that is not in the catalog is a typo or a renamed
 // item; a catalog setting the baseline never mentions is a coverage gap; and every finding can
 // carry the setting's group and what it actually controls.
-import { normKey, clean, findHeaderRow, VALUE_HEADERS, SUBJECT_HEADERS } from './parse.js';
+import { normKey, clean, findHeaderRow, normalizeValue } from './parse.js';
 
 const NAME_HEADERS = ['security setting name', 'setting name', 'security setting', 'security attribute', 'attribute name', 'attribute', 'name', 'setting', 'permission', 'permission name', 'item', 'item name'];
 const DESC_HEADERS = ['security setting description', 'description', 'setting description', 'attribute description', 'what it controls', 'what it does', 'details', 'help'];
@@ -23,24 +23,72 @@ const find = (headers, list, taken = new Set()) => { let best = -1, score = 0; h
  * column and a description or group column, at most six columns, and NO value column and NO user
  * column — that is what separates it from a permission grid or list.
  */
-export function detectCatalog(rows) {
+export function detectCatalog(rows) { const c = detectCatalogLike(rows); return c && c.permission < 0 ? c : null; }
+
+const PERMISSION_HEADERS = ['permission', 'permissions', 'granted', 'allowed', 'access', 'checked', 'enabled', 'value', 'yes no', 'y n', 'assigned', 'has access'];
+/**
+ * Catalog-shaped sheet: setting name + description/group (+ type), and optionally ONE permission
+ * column — which is what eCW's per-ROLE Security Settings export looks like (the catalog columns,
+ * plus the role's checkbox). Returns the column map with `permission` (−1 when absent) or null.
+ */
+export function detectCatalogLike(rows) {
   const hi = findHeaderRow(rows);
   const headers = (rows[hi] || []).map(clean);
-  if (headers.filter(Boolean).length < 2 || headers.filter(Boolean).length > 6) return null;
-  if (find(headers, VALUE_HEADERS) >= 0) return null;
+  if (headers.filter(Boolean).length < 2 || headers.filter(Boolean).length > 7) return null;
   const taken = new Set();
   const name = find(headers, NAME_HEADERS, taken); if (name < 0) return null; taken.add(name);
   const desc = find(headers, DESC_HEADERS, taken); if (desc >= 0) taken.add(desc);
   const type = find(headers, TYPE_HEADERS, taken); if (type >= 0) taken.add(type);
   const group = find(headers, GROUP_HEADERS, taken); if (group >= 0) taken.add(group);
   if (desc < 0 && group < 0) return null;
-  // Every named column must be one of the four: any other column (a user, a role, a value) makes this a
-  // permission sheet, not a catalog.
+  const permission = find(headers, PERMISSION_HEADERS, taken); if (permission >= 0) taken.add(permission);
+  // Every named column must be one of these: any other column (a user, a role, a second value) makes
+  // this a permission grid or list, not a catalog / role export.
   if (headers.some((h, i) => h !== '' && !taken.has(i))) return null;
   // Data rows must be text names, not Y/N.
   const body = rows.slice(hi + 1, hi + 30).filter(r => clean(r[name]) !== '');
   if (body.length < 3 || body.some(r => /^[yn]$/i.test(clean(r[name])))) return null;
-  return { headerRow: hi, name, desc, type, group };
+  return { headerRow: hi, name, desc, type, group, permission };
+}
+
+/**
+ * The role name an eCW per-role export carries, if any: a title line above the header ("Security
+ * Settings — APPS Admin", "Role: Billing"), or nothing. eCW's Export to Excel writes none, so the
+ * caller usually has to supply it.
+ */
+export function roleNameFromSheet(rows, cols) {
+  for (let i = 0; i < cols.headerRow; i++) {
+    const cells = (rows[i] || []).map(clean).filter(Boolean);
+    if (cells.length !== 1) continue;
+    const m = cells[0].match(/^(?:role|role name|security role)\s*[:\-–—]\s*(.+)$/i) || cells[0].match(/^security settings?\s*[:\-–—]\s*(.+)$/i);
+    if (m) return m[1].trim();
+  }
+  return '';
+}
+
+/**
+ * eCW's per-ROLE export → permission records for that role. With a Permission column, its value is the
+ * grant; without one, every listed setting is read as granted (eCW lists what the role has) — the
+ * warning says so, because that assumption is worth checking on a low-privilege role.
+ */
+export function extractRoleList(rows, role, cols = detectCatalogLike(rows), name = '') {
+  if (!cols) throw new Error('not an eCW per-role security settings export (setting name / description / group, optionally a Permission column)');
+  if (!role) throw new Error('the role this export belongs to is not stated in the file — pass it (--role "APPS Admin", or "APPS Admin=file.xlsx")');
+  const out = [], warnings = [];
+  const where = name ? `sheet "${name}"` : 'the sheet';
+  let granted = 0, listed = 0;
+  for (let i = cols.headerRow + 1; i < rows.length; i++) {
+    const r = rows[i] || [];
+    const setting = clean(r[cols.name]); if (!setting) continue;
+    const group = cols.group >= 0 ? clean(r[cols.group]) : '';
+    const raw = cols.permission >= 0 ? (r[cols.permission] === undefined ? '' : r[cols.permission]) : 'listed';
+    const value = cols.permission >= 0 ? normalizeValue(raw) : 'Y';
+    listed++; if (value === 'Y') granted++;
+    out.push({ subject: role, permission: group && normKey(group) !== normKey(setting) ? `${group} > ${setting}` : setting, value, raw, sheet: name, row: i + 1, role, description: cols.desc >= 0 ? clean(r[cols.desc]) : '', listedOnly: cols.permission < 0 });   // listedOnly: absence from this list means NOT granted
+  }
+  if (cols.permission < 0) warnings.push(`${where}: no Permission column — all ${listed} listed settings were read as GRANTED to "${role}" (eCW lists what the role has). Check this once against a low-privilege role's export: it should be short.`);
+  else warnings.push(`${where}: role "${role}": ${granted} of ${listed} settings granted`);
+  return { records: out, warnings, role, listed, granted };
 }
 
 /** Parse a catalog sheet into { settings: [{ name, description, type, group, row }], groups: Map(group → count) }. */

@@ -1,7 +1,7 @@
 // A small local web UI over the validator: node:http only, no dependencies.
 //   GET  /                 the page (web/index.html)
 //   POST /api/inspect      { file: {name, data(base64)}, options } → how the file is read (sheets, layout, users, settings, preview)
-//   POST /api/validate     { baseline: {name, data}, actual: {name, data}, aliases?: {name, data}, options } → JSON result
+//   POST /api/validate     { baseline: {name, data}, actual: {name, data} | actuals: [{name, data, role}], aliases?, catalog?, users?, options } → JSON result
 //   POST /api/report       same body → the .xlsx report (also .csv / .json by `format`)
 //   POST /api/template     { catalog: {name, data}, roles?: [..], groups?: [..] } → a baseline template .xlsx built from the catalog
 // The optional `catalog: {name, data}` in validate/report bodies is eCW's settings catalog export.
@@ -31,13 +31,14 @@ const toFile = (f, label) => {
   if (!data.length) throw Object.assign(new Error(`${label} file is empty`), { status: 400 });
   return { name: String(f.name || label).slice(0, 200), data };
 };
-const perFile = o => ({ ignoreSubjects: o?.ignoreSubjects || undefined, sheet: o?.sheet || undefined, layout: o?.layout || undefined, orientation: o?.orientation || undefined, rolesSheet: o?.rolesSheet || undefined, subjectCol: o?.subjectCol || undefined, permissionCol: o?.permissionCol || undefined, valueCol: o?.valueCol || undefined, categoryCol: o?.categoryCol || undefined, blankIsNo: o?.blankIsNo !== false });
+const perFile = o => ({ role: o?.role || undefined, ignoreSubjects: o?.ignoreSubjects || undefined, sheet: o?.sheet || undefined, layout: o?.layout || undefined, orientation: o?.orientation || undefined, rolesSheet: o?.rolesSheet || undefined, subjectCol: o?.subjectCol || undefined, permissionCol: o?.permissionCol || undefined, valueCol: o?.valueCol || undefined, categoryCol: o?.categoryCol || undefined, blankIsNo: o?.blankIsNo !== false });
 
 export function runFromBody(body) {
   const o = body.options || {};
   const aliases = body.aliases?.data ? loadAliases(toFile(body.aliases, 'aliases')) : (o.aliases || undefined);
   const users = body.users?.data ? loadUsersFile(toFile(body.users, 'users file')) : undefined;
-  return validate(toFile(body.baseline, 'baseline'), toFile(body.actual, 'eCW export'), {
+  const actual = Array.isArray(body.actuals) && body.actuals.length ? body.actuals.map((f, i) => ({ src: toFile(f, `eCW export ${i + 1}`), role: f.role ? String(f.role) : undefined })) : toFile(body.actual, 'eCW export');
+  return validate(toFile(body.baseline, 'baseline'), actual, {
     baseline: { ...perFile(o.baseline), usersFile: users }, actual: perFile(o.actual), catalog: body.catalog?.data ? toFile(body.catalog, 'catalog') : undefined,
     compare: { ignoreUsers: o.ignoreUsers || '', ignorePermissions: o.ignorePermissions || '', onlyUsers: o.onlyUsers || '', aliases, matchByName: o.matchByName !== false, reportUnknownPermissions: o.reportUnknownPermissions !== false, reportOk: !!o.reportOk },
   });
@@ -47,7 +48,7 @@ const view = v => ({
   meta: v.meta, ...v.result,
   catalogFile: v.catalog ? { name: v.catalog.name, sheet: v.catalog.sheet, settings: v.catalog.settings.length, groups: v.catalog.groups.size, warnings: v.catalog.warnings } : null,
   baseline: { name: v.baseline.name, sheet: v.baseline.sheet, layout: v.baseline.layout, readAs: v.meta.baselineLayout, records: v.baseline.records.length, expanded: v.baseline.expanded, warnings: v.baseline.warnings },
-  actual: { name: v.actual.name, sheet: v.actual.sheet, layout: v.actual.layout, readAs: v.meta.actualLayout, records: v.actual.records.length, warnings: v.actual.warnings },
+  actual: { name: v.actual.name, sheet: v.actual.sheet, layout: v.actual.layout, readAs: v.meta.actualLayout, records: v.actual.records.length, warnings: v.actual.warnings, files: v.actual.files || null },
 });
 
 export function createServer() {

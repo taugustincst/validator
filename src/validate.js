@@ -50,7 +50,12 @@ function levenshtein(a, b) {
 /** Closest candidate among `names` (Map key → display), or null when nothing is close enough. */
 export function closest(key, names, threshold = 0.72) {
   let best = null, score = threshold;
-  for (const [k, display] of names) { const s = Math.max(similarity(key, k), similarity(shortName(key), shortName(k)) * 0.95); if (s > score) { score = s; best = { key: k, name: display, score: Math.round(s * 100) / 100 }; } }
+  const bare = k => normKey(String(k).replace(/\(.*$/s, ''));
+  for (const [k, display] of names) {
+    const dk = bare(display), dkey = bare(key);
+    const s = Math.max(similarity(key, k), similarity(shortName(key), shortName(k)) * 0.95, dk && dkey ? similarity(dkey, dk) * 0.97 : 0);
+    if (s > score) { score = s; best = { key: k, name: display, score: Math.round(s * 100) / 100 }; }
+  }
   return best;
 }
 
@@ -83,8 +88,9 @@ export function compare(baseline, actual, opts = {}) {
       if (ua.has(uk)) uk = ua.get(uk);
       if (pa.has(pk)) pk = pa.get(pk);
       if (!uk || !pk) continue;
-      if (!users.has(uk)) users.set(uk, { name: r.subject, perms: new Map() });
+      if (!users.has(uk)) users.set(uk, { name: r.subject, perms: new Map(), listedOnly: false });
       users.get(uk).perms.set(pk, r);   // a later duplicate row wins (eCW prints the effective value last)
+      if (r.listedOnly) users.get(uk).listedOnly = true;   // an eCW per-role export that lists only what the role has
       if (!perms.has(pk)) perms.set(pk, r.permission);
     }
     return { users, perms };
@@ -96,6 +102,20 @@ export function compare(baseline, actual, opts = {}) {
   const matches = [];   // { baseline, ecw, by: 'alias'|'name' }
   for (const [from, to] of settingAlias) if (A.perms.has(to)) matches.push({ baseline: baseline.find(r => permKey(r.permission) === from)?.permission || from, ecw: A.perms.get(to), by: 'alias' });
   for (const [from, to] of userAlias) if (A.users.has(to)) matches.push({ baseline: baseline.find(r => normKey(r.subject) === from)?.subject || from, ecw: A.users.get(to).name, by: 'alias', kind: 'user' });
+  // Users / roles: eCW shows a role as "APPS Admin (Admin (Apps Support))" and a practice's matrix says
+  // "APPS Admin": the name without its parenthetical, when unique on both sides, is the same role.
+  const plain = k => k.replace(/\(.*$/s, '').replace(/\s+/g, ' ').trim();
+  if (opts.matchByName !== false) {
+    const bPlain = new Map(), aPlain = new Map();
+    for (const k of B.users.keys()) { const p = plain(B.users.get(k).name.toLowerCase()); const pk = normKey(p); if (!bPlain.has(pk)) bPlain.set(pk, []); bPlain.get(pk).push(k); }
+    for (const k of A.users.keys()) { const p = plain(A.users.get(k).name.toLowerCase()); const pk = normKey(p); if (!aPlain.has(pk)) aPlain.set(pk, []); aPlain.get(pk).push(k); }
+    for (const [pk, bks] of bPlain) {
+      if (bks.length !== 1 || A.users.has(bks[0])) continue;
+      const aks = aPlain.get(pk); if (!aks || aks.length !== 1 || B.users.has(aks[0]) || aks[0] === bks[0]) continue;
+      const u = B.users.get(bks[0]); B.users.delete(bks[0]); B.users.set(aks[0], u);   // the baseline row takes eCW's key; its name stays the baseline's
+      matches.push({ baseline: u.name, ecw: A.users.get(aks[0]).name, by: 'name', kind: 'user' });
+    }
+  }
   const remap = new Map();   // baseline permKey → ecw permKey
   if (opts.matchByName !== false) {
     const byShort = m => { const out = new Map(); for (const k of m.keys()) { const s = shortName(k); if (!out.has(s)) out.set(s, []); out.get(s).push(k); } return out; };
@@ -129,7 +149,7 @@ export function compare(baseline, actual, opts = {}) {
     detail.push(row);
     if (!a) {
       const granted = [...b.perms.values()].filter(r => isGranted(r.value)).length;
-      const near = closest(uk, userNamesA);
+      const near = closest(name, userNamesA);
       const f = push({ type: 'user-not-in-ecw', severity: 'medium', user: name, permission: '', expected: `${b.perms.size} settings (${granted} granted)`, actual: '', note: `user is in the baseline but not in the eCW export — not set up, deactivated, or spelled differently${near ? `; closest eCW user: "${near.name}"` : ''}`, suggestion: near?.name || '' });
       row.finding = f;
       for (const [pk, br] of b.perms) row.settings.push({ permission: br.permission, expected: show(br), actual: '', type: 'user-not-in-ecw', severity: isGranted(br.value) ? 'medium' : 'info' });
@@ -137,7 +157,7 @@ export function compare(baseline, actual, opts = {}) {
     }
     if (!b) {
       const grants = [...a.perms.values()].filter(r => isGranted(r.value));
-      const near = closest(uk, userNamesB);
+      const near = closest(name, userNamesB);
       const f = push({ type: 'user-not-in-baseline', severity: grants.length ? 'high' : 'low', user: name, permission: '', expected: '', actual: `${a.perms.size} settings (${grants.length} granted)`, note: (grants.length ? 'eCW user with no baseline: every grant is unreviewed — ' + grants.slice(0, 8).map(r => r.permission).join('; ') + (grants.length > 8 ? '; …' : '') : 'eCW user with no baseline and no grants') + (near ? `; closest baseline user: "${near.name}"` : ''), suggestion: near?.name || '' });
       row.finding = f;
       for (const [pk, ar] of a.perms) row.settings.push({ permission: ar.permission, expected: '', actual: show(ar), type: 'user-not-in-baseline', severity: isGranted(ar.value) ? 'high' : 'info' });
@@ -147,7 +167,10 @@ export function compare(baseline, actual, opts = {}) {
       const ar = a.perms.get(pk);
       const base = { user: name, permission: br.permission, expected: show(br), actual: ar ? show(ar) : '', baselineRow: br.row, actualRow: ar?.row };
       let f;
-      if (!ar) {
+      if (!ar && a.listedOnly) {   // not in the role's list = the role does not have it
+        const nl = { ...base, actual: 'N (not listed)' };
+        f = isGranted(br.value) ? push({ ...nl, type: 'missing', severity: 'medium', note: 'required by the baseline but not in this role\'s eCW list — grant it in eCW' }) : push({ ...nl, type: 'ok', severity: 'info', note: '' });
+      } else if (!ar) {
         if (A.perms.has(pk)) f = push({ ...base, type: 'missing', severity: isGranted(br.value) ? 'medium' : 'info', note: 'setting exists in eCW but is not listed for this user' });
         else { const near = closest(pk, A.perms); f = push({ ...base, type: 'permission-not-in-ecw', severity: 'low', note: `this setting does not appear anywhere in the eCW export — renamed, or a baseline typo${near ? `; closest eCW setting: "${near.name}"` : ''}`, suggestion: near?.name || '' }); }
       } else if (br.value === ar.value) f = push({ ...base, type: 'ok', severity: 'info', note: '' });

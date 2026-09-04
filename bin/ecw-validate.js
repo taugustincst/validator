@@ -16,16 +16,18 @@ if (major < 20) { process.stderr.write(`ecw-validate needs Node.js 20 or newer (
 const HELP = `ecw-validate — validate eClinicalWorks security settings against a baseline spreadsheet
 
 Usage
-  ecw-validate validate --baseline <file> --actual <file> [--out report.xlsx] [options]
+  ecw-validate validate --baseline <file> --actual <file> [--actual <file> …] [--out report.xlsx] [options]
   ecw-validate inspect <file> [--sheet NAME] [--layout long|matrix] [--catalog <file>] ...
   ecw-validate serve [--port 8787] [--host 127.0.0.1] [--open]
   ecw-validate template --catalog <file> [--out baseline-template.xlsx] [--roles a,b,c] [--groups "Billing,Progress Notes"]
   ecw-validate example [dir]
 
-Files may be .xlsx, .csv or .tsv. The baseline says what every user (or role) SHOULD have; the
-"actual" file is eCW's exported security settings (Admin → Security Settings → Print/Export, or the
-User Security Settings report). Both may be a grid (settings down, users across — or the reverse) or
-one row per user + setting; the layout is detected from the header row.
+Files may be .xlsx, .csv or .tsv. The baseline says what every role (or user) SHOULD have: a grid
+(settings down, roles across — or the reverse) or one row per subject + setting. The "actual" side is
+eCW's Security Settings export. eCW exports ONE ROLE at a time (pick the role → Export to Excel), so
+give one --actual per role and name the role each file belongs to: --actual "APPS Admin=apps.xlsx"
+--actual "Billing=billing.xlsx" (or --role NAME for a single file, or --actual-dir DIR where each
+file is named after its role, e.g. "Billing.xlsx"). A per-user list (User | Setting | Value) works too.
 
 Options (prefix with --baseline- or --actual- to apply to one file only, e.g. --actual-sheet)
   --sheet NAME|all        sheet to read (default: first sheet with permission data; "all" merges every sheet)
@@ -37,6 +39,9 @@ Options (prefix with --baseline- or --actual- to apply to one file only, e.g. --
   --ignore-roles a*,b     role or user columns (grid) / rows (list) to leave out while reading, e.g. "eCW SUPPORT*"
 
   --blank-is-unknown      a blank matrix cell is "not stated" rather than "not granted"
+eCW side
+  --role NAME             the role a single --actual export belongs to
+  --actual-dir DIR        every .xlsx/.csv in DIR is one role's export, named after the role ("Billing.xlsx")
 Catalog
   --catalog FILE          eCW's Security Settings catalog export (setting name / description / type / group). Findings
                           get each setting's group and what it controls; the report gains Coverage and Not-in-catalog
@@ -65,6 +70,7 @@ function parseArgs(argv) {
     const key = (eq > 0 ? a.slice(2, eq) : a.slice(2)).toLowerCase();
     const flag = /^(json|quiet|include-ok|no-unknown-settings|no-match-by-name|blank-is-unknown|help|open|baseline-blank-is-unknown|actual-blank-is-unknown)$/.test(key);
     const val = eq > 0 ? a.slice(eq + 1) : (flag || argv[i + 1] === undefined || argv[i + 1].startsWith('--') ? true : argv[++i]);
+    if (key === 'actual') { (args.actuals ??= []).push(val); args.actual = val; continue; }   // repeatable: one eCW file per role
     args[key] = val;
   }
   return args;
@@ -72,7 +78,7 @@ function parseArgs(argv) {
 
 const fileOpts = (args, prefix) => {
   const g = k => args[`${prefix}-${k}`] ?? args[k];
-  const o = { sheet: g('sheet'), layout: g('layout'), orientation: g('orientation'), subjectCol: g('user-col'), permissionCol: g('permission-col'), valueCol: g('value-col'), categoryCol: g('category-col'), rolesSheet: g('roles-sheet'), usersFile: g('users'), ignoreSubjects: g('ignore-roles'), blankIsNo: !g('blank-is-unknown') };
+  const o = { sheet: g('sheet'), layout: g('layout'), orientation: g('orientation'), subjectCol: g('user-col'), permissionCol: g('permission-col'), valueCol: g('value-col'), categoryCol: g('category-col'), rolesSheet: g('roles-sheet'), usersFile: g('users'), ignoreSubjects: g('ignore-roles'), role: prefix === 'actual' ? g('role') : undefined, blankIsNo: !g('blank-is-unknown') };
   for (const k of Object.keys(o)) if (o[k] === undefined || o[k] === true) delete o[k];
   if (o.blankIsNo === undefined) o.blankIsNo = true;
   return o;
@@ -84,15 +90,18 @@ async function main(argv) {
   if (!cmd || args.help || cmd === 'help') { process.stdout.write(HELP); return 0; }
 
   if (cmd === 'validate') {
-    if (!args.baseline || !args.actual || args.baseline === true || args.actual === true) { process.stderr.write('validate needs --baseline <file> and --actual <file>\n\n' + HELP); return 2; }
+    if (typeof args['actual-dir'] === 'string') { const dir = args['actual-dir']; if (!fs.existsSync(dir)) { process.stderr.write(`error: --actual-dir not found: ${dir}\n`); return 2; } for (const f of fs.readdirSync(dir).filter(f => /\.(xlsx|xlsm|csv|tsv)$/i.test(f) && !f.startsWith('~$')).sort()) (args.actuals ??= []).push(`${f.replace(/\.[^.]+$/, '')}=${path.join(dir, f)}`); }
+    const actuals = (args.actuals || []).filter(a => typeof a === 'string').map(a => { const m = a.match(/^([^=]+)=(.+)$/); return m ? { src: m[2].trim(), role: m[1].trim() } : { src: a, role: args.actuals.length === 1 && typeof args.role === 'string' ? args.role : undefined }; });
+    if (!args.baseline || args.baseline === true || !actuals.length) { process.stderr.write('validate needs --baseline <file> and at least one --actual <file>\n\n' + HELP); return 2; }
+    for (const a of actuals) if (!fs.existsSync(a.src)) { process.stderr.write(`error: eCW export file not found: ${a.src}\n`); return 2; }
     const out = args.out === true ? 'ecw-validation-report.xlsx' : args.out;
     const opts = {
       baseline: fileOpts(args, 'baseline'), actual: fileOpts(args, 'actual'),
       compare: { ignoreUsers: args['ignore-users'], ignorePermissions: args['ignore-settings'] ?? args['ignore-permissions'], onlyUsers: args['only-users'], aliases: typeof args.aliases === 'string' ? loadAliases(args.aliases) : undefined, matchByName: !args['no-match-by-name'], reportUnknownPermissions: !args['no-unknown-settings'], reportOk: !!args['include-ok'] },
     };
     if (typeof args.catalog === 'string') opts.catalog = args.catalog;
-    for (const [k, f] of [['baseline', args.baseline], ['actual', args.actual], ['catalog', opts.catalog], ['aliases', typeof args.aliases === 'string' ? args.aliases : undefined], ['users', opts.baseline.usersFile]]) if (f && !fs.existsSync(f)) { process.stderr.write(`error: ${k} file not found: ${f}\n`); return 2; }
-    const v = validateToFile(args.baseline, args.actual, out, opts);
+    for (const [k, f] of [['baseline', args.baseline], ['catalog', opts.catalog], ['aliases', typeof args.aliases === 'string' ? args.aliases : undefined], ['users', opts.baseline.usersFile]]) if (f && !fs.existsSync(f)) { process.stderr.write(`error: ${k} file not found: ${f}\n`); return 2; }
+    const v = validateToFile(args.baseline, actuals.length === 1 && !actuals[0].role ? actuals[0].src : actuals, out, opts);
     if (args.json) process.stdout.write(JSON.stringify({ meta: v.meta, ...v.result }, null, 2) + '\n');
     else if (args.quiet) process.stdout.write(`${v.result.pass ? 'PASS' : 'FAIL'}: ${v.result.bySeverity.high} high, ${v.result.bySeverity.medium} medium, ${v.result.bySeverity.low} low, ${v.result.bySeverity.info} info\n`);
     else process.stdout.write(textSummary(v.result, { ...v.meta, limit: Number(args.limit) || 40 }) + '\n' + (out ? `\nreport written to ${out}\n` : ''));
@@ -105,7 +114,7 @@ async function main(argv) {
   if (cmd === 'inspect') {
     const file = args._[1]; if (!file) { process.stderr.write('inspect needs a file\n'); return 2; }
     if (!fs.existsSync(file)) { process.stderr.write(`error: file not found: ${file}\n`); return 2; }
-    const io = fileOpts(args, 'baseline'); if (typeof args.catalog === 'string') { if (!fs.existsSync(args.catalog)) { process.stderr.write(`error: catalog file not found: ${args.catalog}\n`); return 2; } io.catalog = args.catalog; }
+    const io = fileOpts(args, 'baseline'); if (typeof args.role === 'string') io.role = args.role; if (typeof args.catalog === 'string') { if (!fs.existsSync(args.catalog)) { process.stderr.write(`error: catalog file not found: ${args.catalog}\n`); return 2; } io.catalog = args.catalog; }
     const x = inspect(file, io);
     if (args.json) { process.stdout.write(JSON.stringify(x, null, 2) + '\n'); return x.error ? 1 : 0; }
     const w = process.stdout.write.bind(process.stdout);
@@ -113,7 +122,7 @@ async function main(argv) {
     for (const s of x.sheets) w(`  • ${s.name}: ${s.rows} rows × ${s.cols} cols; header on row ${s.headerRow}: ${s.headers.slice(0, 8).map(h => JSON.stringify(h)).join(', ')}${s.headers.length > 8 ? ', …' : ''}\n`);
     if (x.error) { w(`\ncould not read permission data: ${x.error}\n`); return 1; }
     if (x.kind === 'catalog') {
-      w(`\nread as: sheet "${x.sheet}" — ${x.readAs}\n  ${x.records} settings in ${x.groups.length} groups\n`);
+      w(`\nread as: sheet "${x.sheet}" — ${x.readAs}\n  ${x.records} settings in ${x.groups.length} groups\n  (as ONE ROLE's export instead: ecw-validate inspect ${file} --role "APPS Admin")\n`);
       w(`  groups: ${x.groups.slice(0, 12).map(g => `${g.group} (${g.settings})`).join(', ')}${x.groups.length > 12 ? ', …' : ''}\n`);
       for (const m of x.warnings) w(`  ! ${m}\n`);
       w(`\n  first settings:\n`);
