@@ -14,7 +14,8 @@
     "start": "node bin/ecw-validate.js serve",
     "test": "node --test test/*.test.js",
     "examples": "node examples/make-examples.js",
-    "demo": "node bin/ecw-validate.js validate --baseline examples/baseline.xlsx --actual examples/ecw-export.xlsx --catalog examples/catalog.xlsx --out examples/report.xlsx"
+    "demo": "node bin/ecw-validate.js validate --baseline examples/baseline.xlsx --actual examples/ecw-export.xlsx --catalog examples/catalog.xlsx --out examples/report.xlsx",
+    "build:web": "node bin/build-web.mjs"
   },
   "license": "MIT"
 }

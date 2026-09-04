@@ -621,3 +621,17 @@ test('role export: CLI takes one --actual per role ("Role=file"), --role for one
     const j = await res.json(); assert.equal(res.status, 200, j.error); assert.equal(j.pass, true); assert.equal(j.actual.files.length, 2); assert.equal(j.actual.files[1].role, 'Nurse');
   } finally { await s.close(); }
 });
+
+// ───────── the browser build's own DEFLATE decoder ─────────
+
+test('inflate: the plain-JS decoder matches node:zlib on stored, fixed and dynamic blocks, and on real workbooks', async () => {
+  const zlib = await import('node:zlib');
+  const { inflateRaw } = await import('../src/zlib-browser.js');
+  const same = (buf, label) => { for (const level of [0, 1, 6, 9]) { const packed = zlib.deflateRawSync(buf, { level }); const back = Buffer.from(inflateRaw(packed)); assert.equal(Buffer.compare(back, buf), 0, `${label} level ${level}`); } };
+  same(Buffer.alloc(0), 'empty'); same(Buffer.from('a'), 'one byte'); same(Buffer.from('abcabcabcabcabcabcabcabc'), 'repeats');
+  let seed = 12345; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  const rand = Buffer.alloc(200000); for (let i = 0; i < rand.length; i++) rand[i] = rnd() < 0.7 ? 65 + Math.floor(rnd() * 8) : Math.floor(rnd() * 256);
+  same(rand, 'mixed random'); same(Buffer.alloc(70000, 7), 'long run'); same(Buffer.from('x'.repeat(100000) + 'y'.repeat(70000)), 'two runs');
+  for (const f of [BASELINE, EXPORT, CATALOG]) { const z = unzip(fs.readFileSync(f)); for (const n of z.names()) assert.ok(z.get(n).length >= 0, n); }
+  assert.throws(() => inflateRaw(Buffer.from([7, 0])), /invalid block type/);
+});

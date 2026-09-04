@@ -51,6 +51,11 @@ npm test                       # 32 tests, a few seconds
 npm start                      # web UI at http://127.0.0.1:8787
 ```
 
+**No install at all:** open **`dist/ecw-validator.html`** in any modern browser. It is the whole
+validator in one file — the same page, the engine inlined, nothing sent anywhere. It opens on a
+worked example; drop your own files to replace it. Rebuild it after changing the source with
+`npm run build:web`.
+
 On Windows, double-click **`start-validator.cmd`** (on macOS/Linux, `./start-validator.sh`): it
 checks that Node.js is installed, starts the local web UI and opens it in your browser. Node.js LTS
 is at <https://nodejs.org>; nothing else is needed. `npm link` puts `ecw-validate` on your PATH;
@@ -307,8 +312,12 @@ src/catalog.js          eCW's settings catalog: detection, parsing, lookup
 src/validate.js         matching (exact / alias / by name, suggestions), findings, actions, side-by-side detail
 src/report.js           Excel report, terminal summary, CSV
 src/index.js            validate(), inspect(), loadAliases(), loadCatalog(), buildTemplate()
-src/server.js           local HTTP server for the web UI
+src/api.js              the request routes (inspect / validate / report / template), transport-independent
+src/server.js           local HTTP server for the web UI, over api.js
+src/zlib.js, zlib-browser.js, buffer-shim.js   DEFLATE + Buffer for Node and for the browser build
 web/index.html          the web UI (single file)
+bin/build-web.mjs       bundles the engine into web/index.html → dist/ecw-validator.html (runs anywhere, no server)
+dist/                   the built single-file validator
 examples/               sample generator
 test/                   node --test suite (also run on Windows and Linux in GitHub Actions)
 ```

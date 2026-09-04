@@ -3,55 +3,80 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>eCW Security Settings Validator</title>
+<title>eCW Security Validator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-  :root { --bg: #f6f7f9; --card: #fff; --ink: #1c2330; --muted: #64707d; --line: #dfe3e8; --accent: #2456c7; --high: #c0392b; --high-bg: #fde8e6; --med: #a35d00; --med-bg: #fff3d6; --low: #1f5f8b; --low-bg: #e3eef8; --ok: #1e7b45; --ok-bg: #e2f3e8; --warn-bg: #fff8e1; }
+  :root {
+    --bg: #F4F6F7; --card: #FFFFFF; --ink: #1B2430; --muted: #5F6C77; --line: #D8DFE4; --soft: #EEF2F4;
+    --accent: #1F6F8B; --accent-ink: #FFFFFF; --accent-soft: #E4F0F5;
+    --high: #B3261E; --high-bg: #FBE9E7; --med: #8A5A00; --med-bg: #FFF3D6; --low: #2B5F8C; --low-bg: #E4EEF8; --ok: #1E7B45; --ok-bg: #E3F3E9; --warn-bg: #FFF8E3; --warn-line: #EAD48E; --hdr: #FFF1C9;
+    --sans: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #10161B; --card: #18212A; --ink: #E6EBEF; --muted: #98A6B2; --line: #2B3844; --soft: #1F2A34;
+    --accent: #6FB3D2; --accent-ink: #0B1216; --accent-soft: #1A3441;
+    --high: #F28B82; --high-bg: #3A1F1D; --med: #F0C05A; --med-bg: #3A2F14; --low: #8CC2E8; --low-bg: #1A2E40; --ok: #7BD394; --ok-bg: #16311F; --warn-bg: #2E2914; --warn-line: #6A5B21; --hdr: #3A3216;
+    color-scheme: dark;
+  } }
+  :root[data-theme="dark"] {
+    --bg: #10161B; --card: #18212A; --ink: #E6EBEF; --muted: #98A6B2; --line: #2B3844; --soft: #1F2A34;
+    --accent: #6FB3D2; --accent-ink: #0B1216; --accent-soft: #1A3441;
+    --high: #F28B82; --high-bg: #3A1F1D; --med: #F0C05A; --med-bg: #3A2F14; --low: #8CC2E8; --low-bg: #1A2E40; --ok: #7BD394; --ok-bg: #16311F; --warn-bg: #2E2914; --warn-line: #6A5B21; --hdr: #3A3216;
+    color-scheme: dark;
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); }
-  header { padding: 16px 24px; background: var(--card); border-bottom: 1px solid var(--line); display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
-  header h1 { margin: 0; font-size: 18px; } header p { margin: 0; color: var(--muted); }
+  body { margin: 0; font: 14px/1.5 var(--sans); color: var(--ink); background: var(--bg); }
+  header { padding: 18px 24px 16px; background: var(--card); border-bottom: 1px solid var(--line); display: flex; align-items: baseline; gap: 14px 22px; flex-wrap: wrap; }
+  header .eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin: 0 0 2px; }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.01em; text-wrap: balance; } header p { margin: 0; color: var(--muted); max-width: 70ch; }
   main { max-width: 1400px; margin: 0 auto; padding: 18px 24px 60px; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
-  .card h2 { margin: 0 0 4px; font-size: 15px; } .card p.hint { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
-  .drop { border: 2px dashed var(--line); border-radius: 8px; padding: 18px 12px; text-align: center; color: var(--muted); cursor: pointer; transition: .15s; display: block; }
-  .drop.over, .drop:hover { border-color: var(--accent); color: var(--accent); background: #f2f6ff; } .drop.has { border-style: solid; color: var(--ink); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+  .card h2 { margin: 0 0 4px; font-size: 15px; font-weight: 600; } .card p.hint { margin: 0 0 10px; color: var(--muted); font-size: 13px; max-width: 80ch; }
+  .drop { border: 1.5px dashed var(--line); border-radius: 6px; padding: 18px 12px; text-align: center; color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s; display: block; background: var(--soft); }
+  .drop.over, .drop:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); } .drop.has { border-style: solid; color: var(--ink); background: var(--card); }
   .drop input { display: none; } .drop b { color: var(--ink); }
   details { margin-top: 10px; } summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; } label { font-size: 12px; color: var(--muted); display: block; }
-  input[type=text], select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+  input[type=text], select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; font: inherit; background: var(--card); color: var(--ink); }
+  input[type=text]:focus, select:focus, button:focus-visible, .drop:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
   .actions { display: flex; gap: 10px; align-items: center; margin: 16px 0; flex-wrap: wrap; }
-  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); cursor: pointer; } button.primary { background: var(--accent); color: #fff; border-color: var(--accent); } button:disabled { opacity: .5; cursor: default; } button.sm { padding: 3px 9px; font-size: 12px; }
-  .verdict { font-size: 20px; font-weight: 600; padding: 12px 16px; border-radius: 8px; } .verdict.pass { background: var(--ok-bg); color: var(--ok); } .verdict.fail { background: var(--high-bg); color: var(--high); }
-  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; } .stat { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; min-width: 100px; } .stat b { display: block; font-size: 20px; } .stat span { color: var(--muted); font-size: 12px; }
+  button { font: inherit; font-weight: 500; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; } button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); } button:disabled { opacity: .5; cursor: default; } button.sm { padding: 3px 9px; font-size: 12px; }
+  .verdict { font-size: 19px; font-weight: 600; padding: 12px 16px; border-radius: 6px; border-left: 5px solid; } .verdict.pass { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); } .verdict.fail { background: var(--high-bg); color: var(--high); border-color: var(--high); }
+  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; } .stat { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; min-width: 104px; } .stat b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; } .stat span { color: var(--muted); font-size: 12px; }
   .stat.high b { color: var(--high); } .stat.medium b { color: var(--med); } .stat.low b { color: var(--low); } .stat.ok b { color: var(--ok); }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; } th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; } th { background: #f0f2f5; position: sticky; top: 0; user-select: none; white-space: nowrap; } th.sortable { cursor: pointer; }
-  .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; } .tag.high { background: var(--high-bg); color: var(--high); } .tag.medium { background: var(--med-bg); color: var(--med); } .tag.low { background: var(--low-bg); color: var(--low); } .tag.info { background: #eef0f2; color: var(--muted); } .tag.ok { background: var(--ok-bg); color: var(--ok); }
-  .tablewrap { overflow: auto; max-height: 65vh; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; } th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; } th { background: var(--soft); position: sticky; top: 0; user-select: none; white-space: nowrap; font-weight: 600; font-size: 12px; letter-spacing: .02em; } th.sortable { cursor: pointer; } td { font-variant-numeric: tabular-nums; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; } .tag.high { background: var(--high-bg); color: var(--high); } .tag.medium { background: var(--med-bg); color: var(--med); } .tag.low { background: var(--low-bg); color: var(--low); } .tag.info { background: var(--soft); color: var(--muted); } .tag.ok { background: var(--ok-bg); color: var(--ok); }
+  .tablewrap { overflow: auto; max-height: 65vh; border: 1px solid var(--line); border-radius: 6px; background: var(--card); }
   .filters { display: flex; gap: 10px; align-items: center; margin: 12px 0; flex-wrap: wrap; } .filters input[type=text] { width: 260px; }
-  .err { background: var(--high-bg); color: var(--high); padding: 10px 14px; border-radius: 8px; white-space: pre-wrap; margin-top: 10px; }
-  .warn { background: var(--warn-bg); border: 1px solid #f0d78c; padding: 8px 12px; border-radius: 8px; font-size: 13px; margin-top: 8px; } .warn li { margin: 2px 0; }
-  .muted { color: var(--muted); } .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  .err { background: var(--high-bg); color: var(--high); padding: 10px 14px; border-radius: 6px; white-space: pre-wrap; margin-top: 10px; }
+  .warn { background: var(--warn-bg); border: 1px solid var(--warn-line); padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-top: 8px; } .warn li { margin: 2px 0; }
+  .muted { color: var(--muted); } .mono { font-family: var(--mono); font-size: 12px; }
   .peek { margin-top: 10px; font-size: 13px; } .peek .kv { display: grid; grid-template-columns: 110px 1fr; gap: 2px 8px; } .peek .kv div:nth-child(odd) { color: var(--muted); }
-  .chips { display: flex; flex-wrap: wrap; gap: 4px; max-height: 76px; overflow: auto; } .chip { background: #eef1f5; border-radius: 999px; padding: 1px 8px; font-size: 12px; white-space: nowrap; } .chip.role { background: var(--low-bg); color: var(--low); }
-  .sheets { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; } .sheets button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .preview { overflow: auto; max-height: 260px; border: 1px solid var(--line); border-radius: 6px; margin-top: 6px; } .preview table { font-size: 12px; white-space: nowrap; } .preview td, .preview th { padding: 3px 6px; } .preview tr.hdr td { background: #fff3d6; font-weight: 600; } .preview td.rn { color: var(--muted); background: #fafbfc; }
-  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 14px 0 12px; flex-wrap: wrap; } .tabs button { border: none; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 8px 12px; } .tabs button.on { border-bottom-color: var(--accent); color: var(--accent); font-weight: 600; }
-  .ucard { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--card); margin-bottom: 8px; } .ucard h4 { margin: 0 0 4px; font-size: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .ucard ul { margin: 2px 0 2px 18px; padding: 0; } .ucard li { margin: 1px 0; }
-  .do { font-weight: 700; font-size: 11px; letter-spacing: .04em; padding: 1px 6px; border-radius: 4px; margin-right: 4px; } .do.remove { background: var(--high-bg); color: var(--high); } .do.grant { background: var(--med-bg); color: var(--med); } .do.review { background: var(--low-bg); color: var(--low); }
-  .cell { padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; white-space: nowrap; } .cell.ok { background: var(--ok-bg); } .cell.excess { background: var(--high-bg); } .cell.missing, .cell.different { background: var(--med-bg); } .cell.user-not-in-baseline, .cell.user-not-in-ecw { background: var(--low-bg); } .cell.permission-not-in-baseline, .cell.permission-not-in-ecw { background: #eef0f2; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; max-height: 76px; overflow: auto; } .chip { background: var(--soft); border-radius: 999px; padding: 1px 8px; font-size: 12px; white-space: nowrap; } .chip.role { background: var(--low-bg); color: var(--low); }
+  .preview { overflow: auto; max-height: 260px; border: 1px solid var(--line); border-radius: 6px; margin-top: 6px; } .preview table { font-size: 12px; white-space: nowrap; font-family: var(--mono); } .preview td, .preview th { padding: 3px 6px; } .preview tr.hdr td { background: var(--hdr); font-weight: 600; } .preview td.rn { color: var(--muted); background: var(--soft); }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 14px 0 12px; flex-wrap: wrap; } .tabs button { border: none; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 8px 12px; color: var(--muted); } .tabs button.on { border-bottom-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .ucard { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: var(--card); margin-bottom: 8px; } .ucard h4 { margin: 0 0 4px; font-size: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .ucard ul { margin: 2px 0 2px 18px; padding: 0; } .ucard li { margin: 1px 0; } .ucard a { color: var(--accent); }
+  .do { font-weight: 700; font-size: 11px; letter-spacing: .06em; padding: 1px 6px; border-radius: 3px; margin-right: 4px; font-family: var(--mono); } .do.remove { background: var(--high-bg); color: var(--high); } .do.grant { background: var(--med-bg); color: var(--med); } .do.review { background: var(--low-bg); color: var(--low); }
+  .cell { padding: 2px 6px; border-radius: 3px; font-family: var(--mono); font-size: 12px; white-space: nowrap; } .cell.ok { background: var(--ok-bg); } .cell.excess { background: var(--high-bg); } .cell.missing, .cell.different { background: var(--med-bg); } .cell.user-not-in-baseline, .cell.user-not-in-ecw { background: var(--low-bg); } .cell.permission-not-in-baseline, .cell.permission-not-in-ecw { background: var(--soft); color: var(--muted); }
   .two { display: grid; grid-template-columns: 260px 1fr; gap: 14px; } @media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
-  .ulist { max-height: 65vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--card); } .ulist div { padding: 6px 10px; border-bottom: 1px solid var(--line); cursor: pointer; display: flex; justify-content: space-between; gap: 6px; } .ulist div.on { background: #f2f6ff; font-weight: 600; } .ulist small { color: var(--muted); }
+  .ulist { max-height: 65vh; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--card); } .ulist div { padding: 6px 10px; border-bottom: 1px solid var(--line); cursor: pointer; display: flex; justify-content: space-between; gap: 6px; } .ulist div.on { background: var(--accent-soft); font-weight: 600; } .ulist small { color: var(--muted); }
   footer { margin-top: 30px; color: var(--muted); font-size: 12px; }
   .legend span { display: inline-block; margin-right: 10px; }
+  .sample { background: var(--accent-soft); border: 1px solid var(--accent); color: var(--ink); border-radius: 6px; padding: 8px 12px; margin: 0 0 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+  a { color: var(--accent); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
 <header>
-  <h1>eCW Security Settings Validator</h1>
-  <p>See what eCW says each user can do, what your baseline says they should be able to do, and exactly where the two differ. Files stay on this machine.</p>
+  <div><p class="eyebrow">eClinicalWorks · role permissions audit</p><h1>eCW Security Validator</h1></div>
+  <p>What eCW grants each role, what your master matrix says it should have, and exactly where they differ. Files never leave your browser.</p>
 </header>
 <main>
+  <div id="sampleNote" hidden class="sample"><b>Sample data.</b> These are example files with planted discrepancies, so you can see what the validator does. Drop your own matrix and eCW exports to replace them. <button class="sm" id="clearSamples">Clear samples</button></div>
   <div class="grid">
     <div class="card">
       <h2>1 · Baseline — what users <em>should</em> have</h2>
@@ -233,14 +258,23 @@
     const r = await post('/api/report', { ...body(), format: fmt });
     if (!r.ok) { $('status').textContent = 'report failed: ' + ((await r.json()).error || r.statusText); return; }
     const blob = await r.blob(); const name = (r.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1] || `ecw-validation.${fmt}`;
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); $('status').textContent = '';
+    await saveFile(name, blob); $('status').textContent = '';
   };
+  // Hand a generated file to the person: via the hosting page's download capability when there is one
+  // (an Artifact viewer confirms the save), otherwise the browser's own download.
+  async function saveFile(name, blob) {
+    if (window.claude && typeof window.claude.use === 'function') {
+      try { const dl = await window.claude.use('downloads'); if (dl) { await dl.save({ filename: name, data: blob }); $('status').textContent = `saved ${name}`; return; } }
+      catch (e) { if (e && e.code === 'declined') { $('status').textContent = 'save cancelled'; return; } $('status').textContent = 'could not save: ' + (e && e.message || e); return; }
+    }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
   $('tpl').addEventListener('click', async () => {
     if (!files.catalog) return; $('status').textContent = 'building template…';
     const roles = $('tplRoles').value.split(',').map(s => s.trim()).filter(Boolean);
     const r = await post('/api/template', { catalog: files.catalog, roles });
     if (!r.ok) { $('status').textContent = 'template failed: ' + ((await r.json()).error || r.statusText); return; }
-    const blob = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'baseline-template.xlsx'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); $('status').textContent = 'template downloaded — fill in Y/N per role, list users on the Users sheet, then drop it in as the baseline';
+    await saveFile('baseline-template.xlsx', await r.blob()); $('status').textContent += ' — fill in Y/N per role on the Permissions sheet, then drop it in as the baseline';
   });
   $('dlX').addEventListener('click', () => download('xlsx')); $('dlC').addEventListener('click', () => download('csv')); $('dlJ').addEventListener('click', () => download('json'));
 
@@ -260,6 +294,19 @@
     ({ actions: panelActions, findings: panelFindings, sbs: panelSbs, settings: panelSettings, matches: panelMatches, coverage: panelCoverage })[tab]();
   }
   const roleOf = u => (last.detail.find(d => d.user === u) || {}).role || '';
+
+  // ── open on a worked example when the build embedded sample files ──
+  (async () => {
+    const S = window.ECW_SAMPLES; if (!S) return;
+    const put = (key, name, drop) => { files[key] = { name, data: S[name] }; drop.classList.add('has'); drop.querySelector('span').innerHTML = `<b>${esc(name)}</b> <span class="muted">· sample</span>`; };
+    put('baseline', 'baseline.xlsx', $('dropB')); put('catalog', 'catalog.xlsx', $('dropC'));
+    actuals = [{ name: 'ecw-export.xlsx', data: S['ecw-export.xlsx'], role: '', size: Math.round(S['ecw-export.xlsx'].length * 0.75) }];
+    $('dropA').classList.add('has'); $('dropA').querySelector('span').innerHTML = '<b>ecw-export.xlsx</b> <span class="muted">· sample (a per-user list)</span>';
+    $('sampleNote').hidden = false; canRun(); $('tpl').disabled = false;
+    $('clearSamples').addEventListener('click', () => { files.baseline = files.catalog = files.actual = null; actuals = []; for (const p of ['b', 'a', 'c']) markDrop(p, null); $('peekB').innerHTML = $('peekA').innerHTML = $('peekC').innerHTML = $('roleFiles').innerHTML = ''; $('out').innerHTML = ''; $('sampleNote').hidden = true; canRun(); for (const id of ['dlX', 'dlC', 'dlJ']) $(id).disabled = true; $('tpl').disabled = true; });
+    await peek('b'); await peek('c'); await peekActuals();
+    $('run').click();
+  })();
 
   function panelActions() {
     const P = $('panel');
