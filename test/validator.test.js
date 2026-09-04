@@ -247,7 +247,7 @@ test('server: the page is served, /api/validate returns the result, /api/report 
   try {
     const u = `http://127.0.0.1:${s.port}`;
     const page = await fetch(u + '/');
-    assert.equal(page.status, 200); assert.match(page.headers.get('content-type'), /text\/html/); assert.match(await page.text(), /eCW Security Settings Validator/);
+    assert.equal(page.status, 200); assert.match(page.headers.get('content-type'), /text\/html/); assert.match(await page.text(), /eCW Security Validator/);
     const body = { baseline: { name: 'b.xlsx', data: fs.readFileSync(BASELINE).toString('base64') }, actual: { name: 'a.xlsx', data: fs.readFileSync(EXPORT).toString('base64') }, options: { ignoreUsers: 'ztemp' } };
     const post = (p, b) => fetch(u + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
     let r = await post('/api/validate', body); let j = await r.json();

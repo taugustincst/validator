@@ -1696,6 +1696,7 @@ window.ECW = M;
   const $ = id => document.getElementById(id);
   const files = { baseline: null, actual: null, aliases: null, catalog: null, users: null };
   let actuals = [];   // [{ name, data, role, size }] — one eCW export per role
+  let autoRun = false;   // the sample run on load: no scrolling away from the top
   let last = null, sortKey = 'severity', sortDir = 1, tab = 'actions', pickedUser = null;
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const readFile = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res({ name: f.name, data: String(r.result).split(',')[1] || '' }); r.onerror = () => rej(r.error); r.readAsDataURL(f); });
@@ -1800,6 +1801,7 @@ window.ECW = M;
     let x; try { const r = await post('/api/inspect', { file: { name: a.name, data: a.data }, options: { ...fileOpts('a'), role: a.role }, label: 'eCW export' }); x = await r.json(); if (!r.ok) throw new Error(x.error || r.statusText); } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
     if (x.kind === 'catalog' && !a.role) { el.innerHTML = `<div class="warn">This file has eCW's catalog columns and names no role. If it is the export for <b>one role</b> (Security Settings → pick the role → Export to Excel), type the role above and it is read as that role's grants (every listed setting = granted${x.hasPermissionColumn ? '' : ', since there is no Permission column'}). If it is the full settings catalog, remove it here and drop it in the Catalog slot.</div>`; return; }
     if (x.error) { el.innerHTML = `<div class="err">${esc(x.error)}</div>`; return; }
+    const roleBox = document.querySelector(`input[data-role="${i}"]`); if (roleBox) roleBox.closest('label').hidden = x.kind !== 'role-list' && !x.roleExportPossible;   // a per-user list needs no role
     el.innerHTML = `<div class="kv"><div>Read as</div><div><b>${esc(x.readAs)}</b> from sheet “${esc(x.sheet)}”</div><div>Found</div><div><b>${x.records}</b> records · ${x.users.length} ${x.kind === 'role-list' ? 'role' : 'users/roles'} · <b>${x.settings.length}</b> settings · values: ${x.values.map(v => `${esc(v.value)} ×${v.count}`).join(', ')}</div>${x.kind !== 'role-list' ? `<div>Users</div><div class="chips">${x.users.map(u => `<span class="chip">${esc(u.name)}</span>`).join('')}</div>` : ''}</div>${x.warnings?.length ? `<div class="warn"><b>Check:</b><ul>${x.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : ''}`;
   }
   // ── validate ──
@@ -1810,7 +1812,7 @@ window.ECW = M;
       if (!r.ok) throw new Error(j.error || r.statusText);
       last = j; pickedUser = null; tab = j.pass ? 'sbs' : 'actions'; render(); $('status').textContent = '';
       for (const id of ['dlX', 'dlC', 'dlJ']) $(id).disabled = false;
-      $('out').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (!autoRun) $('out').scrollIntoView({ behavior: 'smooth', block: 'start' }); autoRun = false;
     } catch (e) { $('out').innerHTML = `<div class="err">${esc(e.message)}</div>`; $('status').textContent = ''; }
     finally { $('run').disabled = false; }
   });
@@ -1866,7 +1868,7 @@ window.ECW = M;
     $('sampleNote').hidden = false; canRun(); $('tpl').disabled = false;
     $('clearSamples').addEventListener('click', () => { files.baseline = files.catalog = files.actual = null; actuals = []; for (const p of ['b', 'a', 'c']) markDrop(p, null); $('peekB').innerHTML = $('peekA').innerHTML = $('peekC').innerHTML = $('roleFiles').innerHTML = ''; $('out').innerHTML = ''; $('sampleNote').hidden = true; canRun(); for (const id of ['dlX', 'dlC', 'dlJ']) $(id).disabled = true; $('tpl').disabled = true; });
     await peek('b'); await peek('c'); await peekActuals();
-    $('run').click();
+    autoRun = true; $('run').click();
   })();
 
   function panelActions() {
