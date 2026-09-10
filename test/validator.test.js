@@ -763,22 +763,24 @@ test('round trip: exports derived from the matrix itself compare clean, and plan
 // ───────── reading the eCW screen from pixels ─────────
 
 /** Paint an eCW-like Security Settings table: [{ kind: 'header'|'group'|'data', h, checked }] rows on a 900px-wide frame. */
-function paintFrame(rows, { width = 900, top = 40, boxX = 820 } = {}) {
-  const height = top + rows.reduce((a, r) => a + r.h + 1, 0) + 20;
+function paintFrame(rows, { width = 900, top = 40, boxX = 820, chrome = false } = {}) {
+  const height = top + rows.reduce((a, r) => a + r.h + 1, 0) + 20 + (chrome ? 120 : 0);
   const img = { width, height, data: new Uint8ClampedArray(width * height * 4) };
   const fill = (x0, y0, x1, y1, [r, g, b]) => { for (let y = Math.max(0, y0); y < Math.min(height, y1); y++) for (let x = Math.max(0, x0); x < Math.min(width, x1); x++) { const i = (y * width + x) * 4; img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = 255; } };
   fill(0, 0, width, height, [255, 255, 255]);
+  if (chrome) { fill(0, 0, width, 40, [240, 140, 70]); fill(0, 40, width, 90, [238, 238, 238]); top += 90; }   // an orange title bar and a light toolbar above the list
   let y = top; const bands = [];
   rows.forEach((row, i) => {
     const tone = row.kind === 'header' ? [243, 228, 198] : row.kind === 'group' ? [255, 255, 255] : i % 2 ? [253, 246, 236] : [255, 255, 255];
     fill(40, y, 880, y + row.h, tone);
     if (row.kind === 'group') fill(44, y + 6, 58, y + 20, [245, 130, 32]);            // the orange "−" box
     if (row.kind === 'data') { fill(boxX, y + 8, boxX + 14, y + 22, row.checked ? [30, 100, 220] : [255, 255, 255]); if (!row.checked) { fill(boxX, y + 8, boxX + 14, y + 9, [120, 120, 120]); fill(boxX, y + 21, boxX + 14, y + 22, [120, 120, 120]); } }
-    // "text": a run of word-like blocks whose widths follow the row's name (or index), like real labels
-    { let x = 64; const seed = row.name || String(i); for (let k = 0; k < 6 && x < 340; k++) { const wdt = 10 + (seed.charCodeAt(k % seed.length) * 7 + k * 13) % 30; fill(x, y + 9, x + wdt, y + 13, [40, 40, 40]); x += wdt + 6; } }
+    // "text": one 5-column glyph per character, its ink pattern derived from the character, like real labels
+    { const seed = row.name || 'row ' + i; let x = 64; for (let k = 0; k < seed.length && x < 340; k++) { const c = seed.charCodeAt(k); for (let col = 0; col < 5; col++) { for (let r = 0; r < 6; r++) if (((c * 2654435761 + col * 40503 + r * 97) >>> 3) & 1) fill(x + col, y + 8 + r * 2, x + col + 1, y + 9 + r * 2, [40, 40, 40]); } x += 6; } }
     bands.push({ top: y, bottom: y + row.h - 1, ...row });
     y += row.h; fill(40, y, 880, y + 1, [210, 210, 210]); y += 1;                     // the grey separator line
   });
+  if (chrome) { const cutAt = y - 12; fill(0, cutAt, width, height, [236, 236, 236]); for (let k = 0; k < 4; k++) fill(20 + k * 120, cutAt + 12, 120 + k * 120, cutAt + 34, [255, 255, 255]); }   // a grey button bar covering the end of the last row
   return { img, bands };
 }
 
@@ -825,9 +827,10 @@ test('screen: reading by position — a long list scrolled through overlapping f
   const cat = loadCatalog(CATALOG);
   const order = displayOrder(cat);
   // the whole list as one tall frame: header, then per group a group row and its settings; some checked
-  const rows = [{ kind: 'header', h: 26 }];
+  // eCW's layout: every group is its own grid — group row, its column header, then the settings
+  const rows = [];
   const checkedNames = new Set(['Delete Payments', 'Lock Chart', 'Batches', 'SS EPrescription']);
-  for (const g of order) { rows.push({ kind: 'group', h: 28 }); for (const n of g.settings) rows.push({ kind: 'data', h: 34 + (n.length % 3) * 8, checked: checkedNames.has(n), name: n }); }
+  for (const g of order) { rows.push({ kind: 'group', h: 28, name: g.group }); rows.push({ kind: 'header', h: 26 }); for (const n of g.settings) rows.push({ kind: 'data', h: 34 + (n.length % 3) * 8, checked: checkedNames.has(n), name: n }); }
   const { img: tall } = paintFrame(rows, { top: 0 });
   const viewH = 300;
   const crop = y0 => { const h = Math.min(viewH, tall.height - y0); const data = new Uint8ClampedArray(tall.width * h * 4); data.set(tall.data.subarray(y0 * tall.width * 4, (y0 + h) * tall.width * 4)); return { width: tall.width, height: h, data }; };
@@ -841,16 +844,26 @@ test('screen: reading by position — a long list scrolled through overlapping f
   assert.equal(recs.find(r => /Delete Payments/.test(r.permission)).value, 'Y'); assert.equal(recs.find(r => /Delete Refunds/.test(r.permission)).value, 'N');
   // a frame with no overlap is refused and counted as a gap; the list must start at the header
   const pc2 = new PositionalCapture('X', order);
-  assert.equal(pc2.addFrame(frameAt(600)), 0); assert.match(pc2.lastWarning, /scroll to the top/);
+  const dataOnly = frameAt(60); dataOnly.bands = dataOnly.bands.filter(b => b.kind === 'data');
+  assert.equal(pc2.addFrame(dataOnly), 0); assert.match(pc2.lastWarning, /scroll to the top/);
   pc2.addFrame(frameAt(0)); pc2.addFrame(frameAt(900)); assert.equal(pc2.gaps, 1); assert.match(pc2.lastWarning, /no overlap/);
+  // the window's chrome around the list: a title bar above, a button bar cutting the last row below — neither is a row, the cut row is partial
+  const { img: framed } = paintFrame(rows.slice(0, 12), { top: 0, chrome: true });
+  const tf = findTable(framed); const bf = findBands(framed, tf);
+  assert.deepEqual(bf.map(b => b.kind), rows.slice(0, 12).map(r => r.kind), 'chrome is not a band');
+  assert.equal(bf[0].cutTop, false); assert.equal(bf[bf.length - 1].cutBottom, true, 'the last row is cut by the button bar'); assert.equal(bf[bf.length - 2].cutBottom, false);
   // a pinned column header (eCW keeps it in view while the list scrolls): the row cut under it is not a new row
-  const pinned = y0 => { const f = frameAt(y0); const hdr = frameAt(0).bands.find(b => b.kind === 'header'); const cut = f.bands.filter(b => b.kind !== 'header' && b.bottom > hdr.bottom + 4).map(b => ({ ...b, top: Math.max(b.top, hdr.bottom + 1) })); return { bands: [hdr, ...cut], height: f.height }; };
+  const pinned = y0 => { const f = frameAt(y0); const hdr = { ...frameAt(0).bands.find(b => b.kind === 'header'), top: 0, bottom: 25 }; const cut = f.bands.filter(b => b.bottom > hdr.bottom + 4).map(b => ({ ...b, top: Math.max(b.top, hdr.bottom + 1) })); return { bands: [hdr, ...cut], height: f.height }; };
   const pc3 = new PositionalCapture('P', order);
   for (let y = 0; y < tall.height; y += 150) pc3.addFrame(pinned(y));   // the pinned header eats part of the overlap, so scroll a little less per frame
   assert.equal(pc3.counts.complete, true, JSON.stringify(pc3.counts)); assert.equal(pc3.gaps, 0);
   // fingerprints: the same cell in two frames matches, different cells do not
   const a = frameAt(0).bands.filter(b => b.kind === 'data'), b2 = frameAt(20).bands.filter(b => b.kind === 'data');
   assert.ok(sameCell(a[0].fp, b2[0].fp)); assert.ok(!sameCell(a[0].fp, a[1].fp));
+  // names that share a prefix ("Bulk Actions" / "Bulk Restore Faxes") are still told apart
+  const named = frameAt(0).bands; const byName = n => { const i = rows.findIndex(r => r.name === n); return { ...rows[i], top: rows.slice(0, i).reduce((s, r) => s + r.h + 1, 0) }; };
+  const fpOf = n => { const r = byName(n); return fingerprint(tall, { top: r.top, bottom: r.top + r.h - 1 }, 44, 340); };
+  assert.ok(!sameCell(fpOf('Bulk Actions'), fpOf('Bulk Restore Faxes'))); assert.ok(sameCell(fpOf('Bulk Actions'), fpOf('Bulk Actions')));
   // saved as a workbook it reads back as the role
   const x = workbookToRecords(readXlsx(buildXlsx(positionalSheets([pc], cat))));
   assert.equal(x.role, 'Biller'); assert.equal(x.records.length, cat.settings.length);

@@ -52,9 +52,10 @@ reads the screen. It needs the catalog (slot 3) and pictures of the list, from e
   that runs eCW, press **Capture from the eCW screen**, then **Share the eCW window** and pick the
   eCW window. Frames are read continuously while you scroll.
 - **Paste screenshots** — where window sharing is not allowed (the hosted artifact runs inside
-  another site, which blocks it), take screenshots of the list instead (Win+Shift+S), paste them
-  into the capture panel with Ctrl+V, or pick the files with **Add screenshots…** / drop them on
-  the panel. Same reader, same result.
+  another site, which blocks it), take screenshots of the list instead (Win+Shift+S), then press
+  **Paste screenshot** in the capture panel, or click in the panel and press Ctrl+V, or pick the
+  files with **Add screenshot files…** / drop them on the panel. Pictures pasted before the role
+  is typed wait and are read once it is. Same reader, same result.
 
 Either way:
 
@@ -69,9 +70,11 @@ Either way:
    Permission) that can be dropped straight back in next time, or compared in Excel.
 
 How a picture is read: the Permission checkbox column, the row bands and each checkbox's state
-come from the pixels. Names are **not** read as text: eCW lists the groups and the settings inside
-them in the same order as its export, so the k-th row under the g-th group header *is* the
-catalog's k-th setting of that group. Rows are told apart across overlapping pictures by a
+come from the pixels; eCW's title bars, search boxes and button bar around the list are
+recognised and ignored, and a row cut off by the button bar is re-read from the next picture.
+Names are **not** read as text: eCW lists the groups and the settings inside them in the same
+order as its export (each group is its own grid with the group row, a column header and the
+settings), so the k-th row under the g-th group *is* the catalog's k-th setting of that group. Rows are told apart across overlapping pictures by a
 fingerprint of the name cell, and the reader reports when a group shows more or fewer rows than
 the catalog (a catalog from a different eCW version, or a collapsed group). Nothing is downloaded
 and nothing leaves the computer. An optional cross-check reads the names with tesseract.js as

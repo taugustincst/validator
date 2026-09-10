@@ -14,8 +14,9 @@ const isBlue = ([r, g, b]) => b > 150 && b - r > 60 && b - g > 30;            //
 const isOrange = ([r, g, b]) => r > 200 && g > 90 && g < 180 && b < 90;        // eCW's orange group-row icon / header bars
 const isBeige = ([r, g, b]) => r > 225 && g > 205 && g < 240 && b > 160 && b < 215 && r - b > 20;   // the column-header row
 const isCream = ([r, g, b]) => r > 240 && g > 232 && b > 210 && r - b > 8 && r - b < 40;             // the alternating row band
-const isWhite = ([r, g, b]) => r > 245 && g > 245 && b > 245;
+const isWhite = ([r, g, b]) => r > 249 && g > 249 && b > 249;                      // a row band; eCW's panels and button bars are a shade darker
 const isGreyLine = ([r, g, b]) => r < 235 && r > 170 && Math.abs(r - g) < 12 && Math.abs(g - b) < 12;
+const isBoxBorder = ([r, g, b]) => r < 215 && r > 60 && Math.abs(r - g) < 25 && Math.abs(g - b) < 25;   // an unchecked box's grey outline
 
 /** Fraction of pixels along a row segment that satisfy `test` (sampled every `step` px). */
 function rowFraction(img, y, x0, x1, test, step = 2) {
@@ -40,51 +41,76 @@ export function findTable(img) {
   while (x1 < img.width - 1 && cols[x1 + 1] >= bestV * 0.3) x1++;
   const boxW = x1 - x0 + 1;
   if (boxW < 6 || boxW > 40) return null;
-  // The table spans from the left edge of the cream/white bands to a little right of the checkbox.
-  const mid = Math.round((x0 + x1) / 2);
-  let left = 0;
-  for (let x = mid; x > 0; x--) { const frac = colFraction(img, x, isCream); if (frac > 0.08) left = x; }
+  // The table's left edge: on each cream (or beige) row band, walk left from the checkbox while the
+  // pixels stay that tone or are text; the band ends where something else starts. The median over
+  // the visible bands is stable however many rows the picture shows.
+  const probeX = Math.max(0, x0 - 3), edges = [];
+  for (let y = 0; y < img.height && edges.length < 60; y += 2) {
+    const c = px(img, probeX, y); const base = isCream(c) ? isCream : isBeige(c) ? isBeige : null;
+    if (!base) continue;
+    let x = probeX;
+    while (x > 0) { const q = px(img, x - 1, y); if (base(q) || (q[0] + q[1] + q[2]) / 3 < 160 || isOrange(q)) x--; else break; }
+    if (probeX - x > boxW * 4) edges.push(x);
+  }
+  if (!edges.length) return null;
+  edges.sort((a, b) => a - b);
+  const left = edges[Math.floor(edges.length / 2)];
   return { left: Math.max(0, left - 4), right: Math.min(img.width - 1, x1 + boxW * 2), boxX: x0, boxW };
 }
-function colFraction(img, x, test, step = 3) { let n = 0, hit = 0; for (let y = 0; y < img.height; y += step) { n++; if (test(px(img, x, y))) hit++; } return n ? hit / n : 0; }
 
 /**
- * Horizontal bands: [{ top, bottom, kind: 'header'|'group'|'data', checked }] between the table's
- * left edge and its checkbox column. The frame is cut at the thin grey separator lines (and at
- * cream ↔ white tone changes where a separator is missing); each segment is then classified as a
- * whole: the column header is beige, a group row carries the orange icon at the left, a data row
- * has text in the name area. `checked` is whether the segment's checkbox column holds a blue square.
+ * Horizontal bands: [{ top, bottom, kind: 'header'|'group'|'data', checked, cutTop, cutBottom }]
+ * between the table's left edge and its checkbox column. The frame is cut at the thin grey
+ * separator lines (and at cream ↔ white tone changes where a separator is missing); each segment
+ * is then classified as a whole: the column header is beige, a group row carries the orange icon at
+ * the left, a data row has text on a cream or white band. Regions that are not part of the list
+ * (eCW's title bars above it, the button bar below it) are dropped. `checked` is whether the
+ * segment's checkbox column holds a blue square; `cutTop` / `cutBottom` say the band is bordered by
+ * something that is not the list (the button bar, the window edge), so the row is not shown whole.
  */
 export function findBands(img, table) {
   const { left, boxX, boxW } = table;
   const textL = left + 4, textR = Math.max(textL + 20, boxX - 10);
   const line = y => rowFraction(img, y, textL, textR, isGreyLine, 2) > 0.5;
   const tone = y => { const c = rowFraction(img, y, textL, textR, isCream), w = rowFraction(img, y, textL, textR, isWhite), b = rowFraction(img, y, textL, textR, isBeige); return b > 0.5 ? 'beige' : c > 0.5 ? 'cream' : w > 0.5 ? 'white' : 'text'; };
+  const tableTone = y => y < 0 || y >= img.height ? false : line(y) || tone(y) !== 'text' || rowFraction(img, y, textL, textR, c => isCream(c) || isWhite(c) || isBeige(c), 2) > 0.3;
   // 1. cut points: separator lines, and tone changes between two non-text rows
+  // (also around any run of "text"-toned rows longer than a line of text: title bars, button bars, panels)
   const cuts = [0];
-  let prevTone = null;
+  let prevTone = null, textRun = 0;
   for (let y = 0; y < img.height; y++) {
-    if (line(y)) { cuts.push(y); while (y + 1 < img.height && line(y + 1)) y++; cuts.push(y + 1); prevTone = null; continue; }
+    if (line(y)) { cuts.push(y); while (y + 1 < img.height && line(y + 1)) y++; cuts.push(y + 1); prevTone = null; textRun = 0; continue; }
     const t = tone(y);
-    if (t !== 'text') { if (prevTone && t !== prevTone) cuts.push(y); prevTone = t; }
+    if (t === 'text') { textRun++; if (textRun === 22) cuts.push(y - 21); continue; }
+    if (textRun >= 22) cuts.push(y);
+    textRun = 0;
+    if (prevTone && t !== prevTone) cuts.push(y); prevTone = t;
   }
   cuts.push(img.height);
+  cuts.sort((a, b) => a - b);
   // 2. classify each segment
   const bands = [];
   for (let i = 0; i + 1 < cuts.length; i++) {
     const top = cuts[i], bottom = cuts[i + 1] - 1;
     if (bottom - top < 8) continue;
-    let orange = 0, beige = 0, text = 0, blue = 0, boxN = 0, nonWhite = 0;
+    let orange = 0, beige = 0, text = 0, band = 0, blueRows = 0, borderRows = 0, firstBorder = -1, lastBorder = -1, nonWhite = 0, orangeBody = 0;
     for (let y = top; y <= bottom; y++) {
       if (rowFraction(img, y, left, left + Math.max(40, boxW * 4), isOrange, 2) > 0.15) orange++;
-      const t = tone(y); if (t === 'beige') beige++; if (t === 'text') text++;
-      for (let x = boxX; x < boxX + boxW; x += 2) { boxN++; if (isBlue(px(img, x, y))) blue++; }
-      if (rowFraction(img, y, textL, textR, c => !isWhite(c), 4) > 0.02) nonWhite++;
+      if (rowFraction(img, y, textL + 40, textR, isOrange, 4) > 0.3) orangeBody++;
+      const t = tone(y); if (t === 'beige') beige++; if (t === 'text') text++; if (t === 'cream' || t === 'white') band++;
+      let blue = 0, border = 0, n = 0; for (let x = boxX; x < boxX + boxW; x += 1) { n++; const c = px(img, x, y); if (isBlue(c)) blue++; else if (isBoxBorder(c)) border++; }
+      if (n && blue / n > 0.5) blueRows++; if (n && border / n > 0.6) { borderRows++; if (firstBorder < 0) firstBorder = y; lastBorder = y; }
+      if (rowFraction(img, y, textL, textR, ([r, g, b]) => (r + g + b) / 3 < 150, 2) > 0.004) nonWhite++;   // a line of text, however short
     }
     const h = bottom - top + 1;
-    const kind = orange >= 3 ? 'group' : beige / h > 0.5 ? 'header' : (text > 0 || nonWhite > 0) ? 'data' : null;
-    if (!kind) continue;   // blank space above or below the table
-    bands.push({ top, bottom, kind, checked: kind === 'data' ? boxN > 0 && blue / boxN > 0.15 : undefined });
+    let kind = null;
+    if (orange >= 3 && orangeBody === 0 && band / h > 0.4 && h <= 60) kind = 'group';   // the icon at the left on a white row — not an orange title bar
+    else if (beige / h > 0.5 && h <= 60) kind = 'header';
+    else if ((text > 0 || nonWhite > 0) && band / h > 0.5 && h <= 200 && (blueRows >= 4 || (borderRows >= 2 && lastBorder - firstBorder >= boxW * 0.6 && lastBorder - firstBorder <= boxW * 1.6))) kind = 'data';   // a row has a checkbox: blue, or a grey outline a box's height apart
+    if (!kind) continue;   // blank space, title bars, button bars, search boxes: not the list
+    const cutTop = kind === 'data' && top > 0 && !tableTone(top - 2) && !tableTone(top - 4);
+    const cutBottom = kind === 'data' && bottom < img.height - 1 && !tableTone(bottom + 2) && !tableTone(bottom + 4);
+    bands.push({ top, bottom, kind, checked: kind === 'data' ? blueRows >= Math.max(4, boxW * 0.5) : undefined, cutTop, cutBottom });
   }
   return bands;
 }
@@ -165,7 +191,7 @@ export function fingerprint(img, band, x0, x1, w = 96) {
   return out;
 }
 /** Do two fingerprints show the same cell? Both must carry ink, and the profiles must mostly coincide. */
-export const sameCell = (a, b, tol = 0.12) => {
+export const sameCell = (a, b, tol = 0.05) => {
   if (!a || !b || a.length !== b.length) return false;
   let d = 0, u = 0;
   for (let i = 0; i < a.length; i++) { d += Math.abs(a[i] - b[i]); u += Math.max(a[i], b[i]); }
@@ -173,46 +199,52 @@ export const sameCell = (a, b, tol = 0.12) => {
 };
 
 /**
- * Reads one role's list by position. Feed it frames as { bands } where each band carries a
+ * Reads one role's list by position. Feed it frames as { bands, height } where each band carries a
  * fingerprint (`fp`) of its name cell, in screen order, top to bottom. The first frame must show
- * the top of the list (its column header); later frames must overlap the previous one — the
+ * the top of the list (a column header in view); later frames must overlap the previous one — the
  * capture says when they do not, so the user can scroll back.
+ *
+ * Groups: on the eCW screen every group is its own grid — a row with the orange icon and the
+ * group's name, then a beige column header, then the settings. So a new group starts at a group
+ * row, or at a header row that does not directly follow one (the group row may be out of view).
  *
  *   catalogOrder: [{ group, settings: [name, …] }] in eCW's display order (the catalog export's order)
  */
 export class PositionalCapture {
   constructor(role, catalogOrder) {
-    this.role = role; this.order = catalogOrder; this.rows = [];   // [{ kind, fp, checked }] in list order
+    this.role = role; this.order = catalogOrder; this.rows = [];   // [{ kind, fp, checked, partial }] in list order
     this.started = false; this.gaps = 0; this.frames = 0; this.lastWarning = '';
   }
   addFrame({ bands, height }) {
     this.frames++;
-    const hasHeader = bands.some(b => b.kind === 'header');
-    // A row cut by the frame's top edge was seen whole in the previous frame: drop it. A row cut by
-    // the bottom edge is kept but marked partial, and replaced once a later frame shows it whole.
-    // (eCW keeps the column header pinned while the list scrolls, so a row cut by the header's bottom edge is cut too.)
-    const header = bands.find(b => b.kind === 'header');
-    const edge = b => (b.top <= 1 || (this.started && header && b.top <= header.bottom + 3 && b.top > header.top)) ? 'top' : (height && b.bottom >= height - 2) ? 'bottom' : '';
-    const content = bands.filter(b => b.kind !== 'header' && edge(b) !== 'top').map(b => ({ kind: b.kind, fp: b.fp, checked: b.checked, partial: edge(b) === 'bottom' }));
+    const hasHeader = bands.some(b => b.kind === 'header' || b.kind === 'group');
+    // A row cut by the frame's top edge (or hidden under a column header pinned at the top) was seen
+    // whole in the previous frame: drop it. A row cut by the bottom edge or by the button bar is kept
+    // but marked partial, and replaced once a later frame shows it whole.
+    const pinned = this.started && bands.find(b => b.kind === 'header' && b.top <= 2);
+    const edge = b => (b.top <= 1 || b.cutTop || (pinned && b !== pinned && b.top <= pinned.bottom + 3)) ? 'top' : ((height && b.bottom >= height - 2) || b.cutBottom) ? 'bottom' : '';
+    const content = bands.filter(b => edge(b) !== 'top').map(b => ({ kind: b.kind, fp: b.fp, checked: b.checked, partial: edge(b) === 'bottom' }));
     if (!this.started) {
-      if (!hasHeader) { this.lastWarning = 'scroll to the top of the list first: the column header row must be in view when reading starts'; return 0; }
+      if (!hasHeader) { this.lastWarning = 'scroll to the top of the list first: the first group and its column header must be in view when reading starts'; return 0; }
       this.started = true; this.rows = content; this.lastWarning = ''; return this.rows.length;
     }
     if (!content.length) return 0;
-    // Align: find where the frame's first whole band sits in what we already have (search from the end, whole rows only).
-    const lead = content.findIndex(b => !b.partial);
+    // Align: the frame's first whole setting or group row is looked for in what we already have (from
+    // the end, since scrolling moves forward); every overlapping row must agree. Column headers all
+    // look alike, so they never anchor an alignment.
+    const anchor = b => !b.partial && b.kind !== 'header';
+    const same = (r, b) => r.kind === b.kind && (r.kind === 'header' || r.partial || b.partial || sameCell(r.fp, b.fp));
+    const lead = content.findIndex(anchor);
     let at = -1;
-    if (lead >= 0) {
-      const same = (r, b) => r.kind === b.kind && (r.partial || b.partial || sameCell(r.fp, b.fp));
-      for (let i = this.rows.length - 1; i >= 0; i--) {
-        if (this.rows[i].partial || !same(this.rows[i], content[lead])) continue;
-        const start = i - lead; let ok = 0, bad = 0;
-        for (let k = 0; k < content.length && start + k < this.rows.length; k++) { if (start + k < 0) continue; if (same(this.rows[start + k], content[k])) ok++; else bad++; }
-        if (!bad && ok >= 1) { at = start; break; }   // the latest clean alignment: scrolling moves forward
-      }
+    if (lead >= 0) for (let i = this.rows.length - 1; i >= 0; i--) {
+      if (!anchor(this.rows[i]) || !same(this.rows[i], content[lead])) continue;
+      const start = i - lead; let bad = 0;
+      for (let k = 0; k < content.length && start + k < this.rows.length; k++) { if (start + k < 0) continue; if (!same(this.rows[start + k], content[k])) bad++; }
+      if (!bad) { at = start; break; }
     }
     if (at < 0) {
-      this.gaps++; this.lastWarning = 'no overlap with the previous frame — scroll back up until a row you already passed is in view, then continue more slowly'; return 0;
+      if (lead < 0) { this.lastWarning = ''; return 0; }   // only headers or cut rows in view: nothing to say yet
+      this.gaps++; this.lastWarning = 'no overlap with the previous picture — scroll back up until a row you already passed is in view, then continue more slowly'; return 0;
     }
     let added = 0;
     content.forEach((b, i) => {
@@ -224,14 +256,18 @@ export class PositionalCapture {
     this.lastWarning = '';
     return added;
   }
-  /** Assign settings by position: group headers advance through the catalog's groups; data rows take the group's settings in order. */
+  /** Assign settings by position: group boundaries advance through the catalog's groups; data rows take the group's settings in order. */
   assign() {
     const out = []; const problems = [];
-    let g = -1, k = 0;
+    let g = -1, k = 0, prev = null;
+    const close = () => { if (g >= 0 && this.order[g] && k !== this.order[g].settings.length) problems.push(`${this.order[g].group}: ${k} rows seen, ${this.order[g].settings.length} expected`); };
     for (const r of this.rows) {
-      if (r.kind === 'group') { if (g >= 0 && k !== (this.order[g]?.settings.length || 0)) problems.push(`${this.order[g].group}: ${k} rows seen, ${this.order[g].settings.length} expected`); g++; k = 0; continue; }
-      if (g < 0) { problems.push('rows before the first group header'); continue; }
-      const grp = this.order[g]; if (!grp) { problems.push('more group headers than the catalog has groups'); break; }
+      const boundary = r.kind === 'group' || (r.kind === 'header' && prev?.kind !== 'group');
+      prev = r;
+      if (boundary) { close(); g++; k = 0; continue; }
+      if (r.kind !== 'data') continue;
+      if (g < 0) { problems.push('rows before the first group'); continue; }
+      const grp = this.order[g]; if (!grp) { problems.push('more groups on the screen than the catalog has'); break; }
       const name = grp.settings[k];
       if (name) out.push({ group: grp.group, name, checked: !!r.checked, position: k + 1 });
       else problems.push(`${grp.group}: more rows than the catalog's ${grp.settings.length} settings`);
