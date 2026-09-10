@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const read = f => fs.readFileSync(path.join(root, f), 'utf8');
+export const read = f => fs.readFileSync(path.join(root, f), 'utf8').replace(/\r\n/g, '\n');   // CRLF checkouts (Windows) read the same
 const modName = spec => path.basename(spec).replace(/\.js$/, '').replace('zlib-browser', 'zlib');
 
 /**
