@@ -137,6 +137,7 @@ export function roleExportRows(role) {
 export function webSamples() { return { 'baseline.xlsx': buildXlsx(baselineSheets({ users: false })), 'catalog.xlsx': buildXlsx([{ name: 'Sheet1', rows: catalogRows() }]), ...Object.fromEntries(ROLES.map(role => [`roles/${role}.xlsx`, buildXlsx([{ name: 'Sheet1', rows: roleExportRows(role) }])])) }; }
 
 export function writeExamples(dir) {
+  fs.mkdirSync(dir, { recursive: true });
   const b = path.join(dir, 'baseline.xlsx'), a = path.join(dir, 'ecw-export.xlsx'), c = path.join(dir, 'catalog.xlsx');
   writeXlsx(b, baselineSheets());
   writeXlsx(a, [{ name: 'Security Settings', rows: ecwExportRows(), widths: [16, 34, 44, 10], freeze: false, styles: (r) => (r === 3 ? 1 : 0) }]);

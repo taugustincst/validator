@@ -2,3 +2,9 @@ node_modules/
 examples/report.*
 *.log
 .DS_Store
+dist/ecw-validator
+dist/ecw-validator.exe
+dist/*.blob
+dist/*.cjs
+dist/sea-config.json
+dist/*.zip

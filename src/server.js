@@ -26,13 +26,13 @@ const readBody = req => new Promise((resolve, reject) => {
   req.on('error', reject);
 });
 
-export function createServer() {
+export function createServer({ page = null } = {}) {
   return http.createServer(async (req, res) => {
     const send = (status, body, type = 'application/json; charset=utf-8', extra = {}) => { res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...extra }); res.end(body); };
     const json = (status, obj) => send(status, JSON.stringify(obj));
     try {
       const url = new URL(req.url, 'http://x');
-      if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) return send(200, fs.readFileSync(PAGE), 'text/html; charset=utf-8', { 'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self'; img-src data:" });
+      if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) return send(200, page || fs.readFileSync(PAGE), 'text/html; charset=utf-8', { 'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self'; img-src data:" });
       if (req.method === 'GET' && url.pathname === '/api/health') return json(200, { ok: true, node: process.version });
       if (req.method === 'POST' && url.pathname.startsWith('/api/')) {
         const ct = String(req.headers['content-type'] || '');
@@ -48,9 +48,9 @@ export function createServer() {
   });
 }
 
-export function serve({ port = 8787, host = '127.0.0.1' } = {}) {
+export function serve({ port = 8787, host = '127.0.0.1', page = null } = {}) {
   return new Promise((resolve, reject) => {
-    const server = createServer();
+    const server = createServer({ page });
     server.once('error', reject);
     server.listen(port, host, () => resolve({ server, port: server.address().port, host, close: () => new Promise(r => { server.closeAllConnections?.(); server.close(() => r()); }) }));
   });

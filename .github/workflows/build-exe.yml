@@ -1,0 +1,20 @@
+name: build-exe
+# Builds the standalone Windows executable and keeps it as a workflow artifact (Actions → this run → Artifacts).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  exe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+      - run: node bin/build-exe.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ecw-validator-windows
+          path: dist/ecw-validator.exe

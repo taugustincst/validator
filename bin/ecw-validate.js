@@ -86,7 +86,7 @@ const fileOpts = (args, prefix) => {
   return o;
 };
 
-async function main(argv) {
+export async function main(argv) {
   const args = parseArgs(argv);
   const cmd = args._[0];
   if (!cmd || args.help || cmd === 'help') { process.stdout.write(HELP); return 0; }
@@ -169,7 +169,7 @@ async function main(argv) {
     const { serve } = await import('../src/server.js');
     const port = Number(args.port) || Number(process.env.PORT) || 8787;
     const host = typeof args.host === 'string' ? args.host : '127.0.0.1';
-    const s = await serve({ port, host });
+    const s = await serve({ port, host, page: globalThis.__ECW_PAGE || null });
     const link = `http://${host === '0.0.0.0' ? '127.0.0.1' : host}:${s.port}/`;
     process.stdout.write(`eCW security validator: ${link}  (Ctrl-C to stop)\n`);
     if (args.open) { const { exec } = await import('node:child_process'); exec((process.platform === 'win32' ? 'start ""' : process.platform === 'darwin' ? 'open' : 'xdg-open') + ' ' + link, () => {}); }

@@ -100,9 +100,19 @@ matrix, or adopt it as the new master after review.
 ```bash
 git clone https://github.com/taugustincst/validator
 cd validator
-npm test                       # 32 tests, a few seconds
+npm test                       # 48 tests, a few seconds
 npm start                      # web UI at http://127.0.0.1:8787
 ```
+
+**Standalone Windows program:** `ecw-validator.exe` needs nothing installed, not even Node.js.
+Double-click it: it starts the validator on this computer only (127.0.0.1) and opens it in your
+browser; keep its window open while you work and close it when done. Because the page is served
+from a real local address, **Share the eCW window** works there (Chrome or Edge), as does pasting
+screenshots. The same file is the command line, so `ecw-validator.exe validate --baseline … ` does
+what `ecw-validate` does. Windows may show a SmartScreen notice the first time because the file is
+not code-signed: choose *More info → Run anyway*. Build it with `npm run build:exe` (needs
+internet once, to fetch the matching Node.js build and the injection tool); the GitHub Action
+*build-exe* also produces it on every push to main, under the run's Artifacts.
 
 **No install at all:** open **`dist/ecw-validator.html`** in any modern browser. It is the whole
 validator in one file — the same page, the engine inlined, nothing sent anywhere. It opens on a

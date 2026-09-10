@@ -11,71 +11,24 @@
 // file-system entry points are stubbed (the page only ever passes bytes).
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { transform, ENGINE, root, read } from './bundle-lib.mjs';
 
-const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const read = f => fs.readFileSync(path.join(root, f), 'utf8');
-
-// Module order: dependencies first (the parse ↔ catalog cycle is fine: links run again after all bodies).
-const MODULES = [
-  ['zlib', 'src/zlib-browser.js'],
-  ['xlsx', 'src/xlsx.js'],
-  ['parse', 'src/parse.js'],
-  ['catalog', 'src/catalog.js'],
-  ['validate', 'src/validate.js'],
-  ['report', 'src/report.js'],
-  ['document', 'src/document.js'],
-  ['summary', 'src/summary.js'],
-  ['pdf', 'src/pdf.js'],
-  ['screen', 'src/screen.js'],
-  ['index', 'src/index.js'],
-  ['api', 'src/api.js'],
-];
-const modName = spec => path.basename(spec).replace(/\.js$/, '').replace('zlib-browser', 'zlib');
-
-function transform(id, src) {
-  const imports = new Map();   // module id → [{ name, alias }]
-  const exports = new Set();
-  const reexports = [];        // { from, names: [[name, alias]] } — export { a as b } from './x.js'
-  const stars = [];            // export * from './x.js'
-  const nodeShims = [];
-  const lines = src.split('\n');
-  const out = [];
-  const addImport = (from, list) => { const m = modName(from); if (!imports.has(m)) imports.set(m, []); for (const item of list) { const [name, alias] = item.split(/\s+as\s+/).map(s => s.trim()); if (name) imports.get(m).push({ name, alias: alias || name }); } };
-  for (let line of lines) {
-    let m;
-    if ((m = line.match(/^import\s+\{([^}]*)\}\s+from\s+'(\.\/[^']+)';\s*$/))) { addImport(m[2], m[1].split(',')); continue; }
-    if ((m = line.match(/^import\s+(\w+)\s+from\s+'node:(\w+)';\s*$/))) { nodeShims.push([m[1], m[2]]); continue; }
-    if ((m = line.match(/^import\s+\{([^}]*)\}\s+from\s+'node:(\w+)';\s*$/))) { nodeShims.push([null, m[2], m[1]]); continue; }
-    if ((m = line.match(/^export\s+\*\s+from\s+'(\.\/[^']+)';\s*$/))) { stars.push(modName(m[1])); continue; }
-    if ((m = line.match(/^export\s+\{([^}]*)\}\s+from\s+'(\.\/[^']+)';\s*$/))) { reexports.push({ from: modName(m[2]), names: m[1].split(',').map(s => s.trim()).filter(Boolean).map(s => s.split(/\s+as\s+/).map(x => x.trim())) }); continue; }
-    if ((m = line.match(/^export\s+\{([^}]*)\};\s*$/))) { for (const s of m[1].split(',')) { const [name, alias] = s.split(/\s+as\s+/).map(x => x.trim()); if (name) { exports.add(alias ? `${alias}: ${name}` : name); } } continue; }
-    if ((m = line.match(/^export\s+(async\s+function|function|const|let|class)\s+(\w+)/))) { exports.add(m[2]); line = line.replace(/^export\s+/, ''); }
-    out.push(line);
-  }
-  // Re-exports: pull them in as imports under their alias and export them.
-  for (const r of reexports) for (const [name, alias] of r.names) { addImport('./' + r.from + '.js', [`${name} as ${alias || name}`]); exports.add(alias || name); }
-  const importDecls = [...imports].map(([mod, list]) => list.map(i => i.alias));
-  const allNames = [...new Set(importDecls.flat())];
-  const link = [...imports].map(([mod, list]) => `if (M.${mod}) { ${list.map(i => `${i.alias} = M.${mod}.${i.name};`).join(' ')} }`).join(' ');
-  const shims = nodeShims.map(([name, mod, names]) => {
-    if (mod === 'fs') return `const ${name} = __fs;`;
-    if (mod === 'path') return `const ${name} = __path;`;
-    if (mod === 'url') return `const ${names ? names.replace(/\s+as\s+/g, ':') : name} = __url;`;
-    if (mod === 'http') return `const ${name} = null;`;
-    if (mod === 'zlib') return `const ${name} = null;`;
-    throw new Error(`${id}: no browser shim for node:${mod}`);
-  }).join('\n');
-  const starMerge = stars.map(s => `Object.assign(__exports, M.${s});`).join(' ');
-  return `M.${id} = (() => {\n${allNames.length ? `let ${allNames.join(', ')};` : ''}\nconst __link = () => { ${link} }; __links.push(__link); __link();\n${shims}\n${out.join('\n')}\nconst __exports = { ${[...exports].join(', ')} }; ${starMerge}\nreturn __exports;\n})();\n`;
-}
+const MODULES = [['zlib', 'src/zlib-browser.js'], ...ENGINE];
+const shim = (name, mod, names, id) => {
+  if (mod === 'fs') return `const ${name} = __fs;`;
+  if (mod === 'path') return `const ${name} = __path;`;
+  if (mod === 'url') return `const ${names ? names.replace(/\s+as\s+/g, ':') : name} = __url;`;
+  if (mod === 'http') return `const ${name} = null;`;
+  if (mod === 'zlib') return `const ${name} = null;`;
+  throw new Error(`${id}: no browser shim for node:${mod}`);
+};
 
 const bundle = ['const M = {}; const __links = [];',
   `const __fs = { readFileSync: () => { throw new Error('file paths are not available in the browser; pass the file contents'); }, writeFileSync: () => { throw new Error('not available in the browser'); }, mkdirSync: () => {}, existsSync: () => false, readdirSync: () => [] };`,
   `const __path = { basename: p => String(p).replace(/^.*[\\\\/]/, ''), dirname: p => String(p).replace(/[\\\\/][^\\\\/]*$/, '') || '.', resolve: (...a) => a.join('/'), join: (...a) => a.join('/') };`,
   `const __url = { fileURLToPath: u => String(u) };`,
   read('src/buffer-shim.js').replace(/^export\s+/gm, ''),
-  ...MODULES.map(([id, file]) => transform(id, read(file))),
+  ...MODULES.map(([id, file]) => transform(id, read(file), { shim })),
   '__links.forEach(l => l());',
   'window.ECW = M;'].join('\n');
 
