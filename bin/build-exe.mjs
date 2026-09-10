@@ -52,6 +52,7 @@ execFileSync(process.execPath, ['--experimental-sea-config', path.join(dist, 'se
 // 3. The Node binary to inject into.
 let exe;
 if (linux) { exe = path.join(dist, 'ecw-validator'); fs.copyFileSync(process.execPath, exe); }
+else if (process.platform === 'win32' && !zipArg) { exe = path.join(dist, 'ecw-validator.exe'); fs.copyFileSync(process.execPath, exe); }   // on Windows: this very node.exe
 else {
   const ver = process.version;   // the blob must match the binary's Node version
   const zipName = `node-${ver}-win-x64.zip`;

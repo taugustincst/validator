@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 jobs:
   exe:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest   # built on Windows with the runner's own node.exe, so blob and binary always match
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -4,9 +4,23 @@
 //   ecw-validator.exe --port 8787 --no-open
 // Nothing is installed, nothing leaves the computer: the page is served on loopback only.
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import { main as cli } from './ecw-validate.js';
 
 export async function run(argv) {
+  try { return await start(argv); }
+  catch (e) {
+    // Started by a double-click, the console would vanish with the error: say what happened, log it next to the program, wait.
+    const msg = `ecw-validator could not start: ${e && e.stack || e}\n`;
+    process.stderr.write(msg);
+    try { fs.appendFileSync(path.join(path.dirname(process.execPath), 'ecw-validator.log'), `${new Date().toISOString()} ${msg}`); } catch {}
+    if (process.platform === 'win32' && process.stdin.isTTY) { process.stderr.write('\nPress Enter to close this window.\n'); await new Promise(r => { process.stdin.resume(); process.stdin.once('data', r); }); }
+    return 2;
+  }
+}
+
+async function start(argv) {
   const COMMANDS = ['validate', 'inspect', 'serve', 'template', 'document', 'example', 'help'];
   if (argv.some(a => COMMANDS.includes(a)) || argv.includes('--help') || argv.includes('-h') || argv.includes('--version')) return cli(argv);
   const portArg = argv.indexOf('--port');
